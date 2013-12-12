@@ -43,6 +43,8 @@ import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.io.serializer.Serializer;
 
+import org.apache.hadoop.mapred.SharedHashMap;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -58,7 +60,108 @@ import org.apache.commons.logging.LogFactory;
 public class IFile {
   private static final Log LOG = LogFactory.getLog(IFile.class);
   public static final int EOF_MARKER = -1; // End of File Marker
-  
+    
+    public static class shmWriter<K extends Object, V extends Object> {
+	Class<K> keyClass;
+	Class<V> valueClass;
+	Serializer<K> keySerializer;
+	Serializer<V> valueSerializer;
+
+	private SharedHashMap shm;
+	private Log LOG;
+	private long numRecordsWritten = 0;
+	private final Counters.Counter writtenRecordsCounter;
+
+	DataOutputBuffer kbuf = new DataOutputBuffer();
+	DataOutputBuffer vbuf = new DataOutputBuffer();
+	DataInputBuffer kinput = new DataInputBuffer();
+	DataInputBuffer vinput = new DataInputBuffer();
+
+	public shmWriter(Configuration conf, Path shmFile, 
+			 Class<K> keyClass, Class<V> valueClass,
+			 CompressionCodec codec,
+			 Counters.Counter writesCounter) throws IOException {
+    
+	    this.keyClass = keyClass;
+	    this.valueClass = valueClass;
+	    LOG = LogFactory.getLog(IFile.class.getName());
+	    SerializationFactory serializationFactory = new SerializationFactory(conf);
+	    this.writtenRecordsCounter = writesCounter;
+	    shm = new SharedHashMap(shmFile.toString(), true);
+	    this.keySerializer = serializationFactory.getSerializer(keyClass);
+	    this.keySerializer.open(kbuf);
+	    this.valueSerializer = serializationFactory.getSerializer(valueClass);
+	    this.valueSerializer.open(vbuf);
+	}
+	
+
+	public void close() throws IOException {
+	    
+	    // Close the serializers
+	    keySerializer.close();
+	    valueSerializer.close();
+	    
+	    if(writtenRecordsCounter != null) {
+		writtenRecordsCounter.increment(numRecordsWritten);
+	    }
+	    shm.close();
+	}
+
+	public void append(K key, V value) throws IOException {
+
+	    if (key.getClass() != keyClass)
+		throw new IOException("wrong key class: "+ key.getClass()
+				      +" is not "+ keyClass);
+	    if (value.getClass() != valueClass)
+		throw new IOException("wrong value class: "+ value.getClass()
+				      +" is not "+ valueClass);
+	    
+	    // Append the 'key'
+	    keySerializer.serialize(key);
+	    valueSerializer.serialize(value);
+	    
+	    int keyLength = kbuf.getLength();
+	    if (keyLength < 0) {
+		throw new IOException("Negative key-length not allowed: " + keyLength + 
+				      " for " + key);
+	    }
+	    
+	    // Append the 'value'
+	    
+	    int valueLength = vbuf.getLength();
+	    if (valueLength < 0) {
+		throw new IOException("Negative value-length not allowed: " + 
+				      valueLength + " for " + value);
+	    }
+	    // Write to sharedhashmap
+	    kinput.reset(kbuf.getData(), kbuf.getLength());
+	    vinput.reset(vbuf.getData(), vbuf.getLength());
+	    shm.put(kinput, vinput);
+	    // Reset
+	    kbuf.reset();
+	    vbuf.reset();
+	    // Update bytes written
+	    //	    decompressedBytesWritten += keyLength + valueLength + 8; // currently 4 bytes each are being used to write keylen and val len
+
+	    //		WritableUtils.getVIntSize(keyLength) + 
+	    //	WritableUtils.getVIntSize(valueLength);
+	    ++numRecordsWritten;
+	}
+	
+	public long getRawLength() {
+	    return shm.getRawLength();
+	}
+	
+	public long getCompressedLength() {
+	    return shm.getRawLength();
+	}
+      
+	public long getHashSize() {
+	    return shm.getHashSize();
+	}
+    }
+
+    
   /**
    * <code>IFile.Writer</code> to write out intermediate map-outputs. 
    */

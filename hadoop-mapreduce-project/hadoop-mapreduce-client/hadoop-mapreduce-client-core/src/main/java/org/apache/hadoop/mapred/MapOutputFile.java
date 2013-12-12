@@ -47,6 +47,17 @@ public abstract class MapOutputFile implements Configurable {
 
   public MapOutputFile() {
   }
+    
+    
+    public abstract void setSizeSpillFile(long l);
+    
+    
+    /** 
+     * Get the size of all spill files 
+     */
+    public abstract long getSizeSpillFiles();
+
+    
 
   /**
    * Return the path to local map output file created earlier
@@ -112,6 +123,9 @@ public abstract class MapOutputFile implements Configurable {
   public abstract Path getSpillFileForWrite(int spillNumber, long size)
       throws IOException;
 
+    public abstract Path getSpillFileForWrite(int spillNumber)
+	throws IOException;
+    
   /**
    * Return a local map spill index file created earlier
    *
@@ -131,6 +145,9 @@ public abstract class MapOutputFile implements Configurable {
    */
   public abstract Path getSpillIndexFileForWrite(int spillNumber, long size)
       throws IOException;
+
+    public abstract Path getSpillIndexFileForWrite(int spillNumber)
+	throws IOException;
 
   /**
    * Return a local reduce input file created earlier

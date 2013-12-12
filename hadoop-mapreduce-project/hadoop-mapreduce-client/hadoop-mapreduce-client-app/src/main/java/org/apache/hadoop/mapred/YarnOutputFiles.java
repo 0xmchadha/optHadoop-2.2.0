@@ -40,7 +40,8 @@ import org.apache.hadoop.mapreduce.MRConfig;
 @InterfaceAudience.Private
 @InterfaceStability.Unstable
 public class YarnOutputFiles extends MapOutputFile {
-
+    
+    private long sizeSpillFile;
   private JobConf conf;
 
   private static final String JOB_OUTPUT_DIR = "output";
@@ -50,6 +51,17 @@ public class YarnOutputFiles extends MapOutputFile {
 
   public YarnOutputFiles() {
   }
+    
+    public void setSizeSpillFile(long l) {
+	sizeSpillFile = l;
+    }
+    
+    /** 
+     * Get the size of all spill files 
+     */
+    public long getSizeSpillFiles() {
+	return sizeSpillFile;
+    }    
 
   // assume configured to $localdir/usercache/$user/appcache/$appId
   private LocalDirAllocator lDirAlloc = 
@@ -160,6 +172,14 @@ public class YarnOutputFiles extends MapOutputFile {
         String.format(String.format(SPILL_FILE_PATTERN,
             conf.get(JobContext.TASK_ATTEMPT_ID), spillNumber)), size, conf);
   }
+    
+    public Path getSpillFileForWrite(int spillNumber)
+	throws IOException {
+	    return lDirAlloc.getLocalPathForWrite(
+        String.format(String.format(SPILL_FILE_PATTERN,
+            conf.get(JobContext.TASK_ATTEMPT_ID), spillNumber)), conf);
+    }
+
 
   /**
    * Return a local map spill index file created earlier
@@ -182,13 +202,19 @@ public class YarnOutputFiles extends MapOutputFile {
    * @return path
    * @throws IOException
    */
-  public Path getSpillIndexFileForWrite(int spillNumber, long size)
-      throws IOException {
-    return lDirAlloc.getLocalPathForWrite(
-        String.format(SPILL_INDEX_FILE_PATTERN,
-            conf.get(JobContext.TASK_ATTEMPT_ID), spillNumber), size, conf);
-  }
+    public Path getSpillIndexFileForWrite(int spillNumber, long size)
+	throws IOException {
+	return lDirAlloc.getLocalPathForWrite(String.format(SPILL_INDEX_FILE_PATTERN,
+							    conf.get(JobContext.TASK_ATTEMPT_ID), spillNumber), size, conf);
+    }
+    
+    public Path getSpillIndexFileForWrite(int spillNumber) throws IOException {
+	return lDirAlloc.getLocalPathForWrite(
+					      String.format(SPILL_INDEX_FILE_PATTERN,
+							    conf.get(JobContext.TASK_ATTEMPT_ID), spillNumber), conf);
+    }
 
+    
   /**
    * Return a local reduce input file created earlier
    * 

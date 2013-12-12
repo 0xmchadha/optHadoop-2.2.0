@@ -1090,23 +1090,17 @@ abstract public class Task implements Writable, Configurable {
    * 
    * @return -1 if it can't be found.
    */
-   private long calculateOutputSize() throws IOException {
-    if (!isMapOrReduce()) {
-      return -1;
+    private long calculateOutputSize() throws IOException {
+	if (!isMapOrReduce()) {
+	    return -1;
+	}
+	
+	if (isMapTask() && conf.getNumReduceTasks() > 0) {
+	    return mapOutputFile.getSizeSpillFiles();
+	}
+	return -1;
     }
-
-    if (isMapTask() && conf.getNumReduceTasks() > 0) {
-      try {
-        Path mapOutput =  mapOutputFile.getOutputFile();
-        FileSystem localFS = FileSystem.getLocal(conf);
-        return localFS.getFileStatus(mapOutput).getLen();
-      } catch (IOException e) {
-        LOG.warn ("Could not find output size " , e);
-      }
-    }
-    return -1;
-  }
-
+    
   private void sendDone(TaskUmbilicalProtocol umbilical) throws IOException {
     int retries = MAX_RETRIES;
     while (true) {

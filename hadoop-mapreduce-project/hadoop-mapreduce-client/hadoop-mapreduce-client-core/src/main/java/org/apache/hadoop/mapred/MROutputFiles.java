@@ -39,11 +39,27 @@ import org.apache.hadoop.mapreduce.MRJobConfig;
 @InterfaceStability.Unstable
 public class MROutputFiles extends MapOutputFile {
 
+    private long sizeSpillFile;
+
   private LocalDirAllocator lDirAlloc =
     new LocalDirAllocator(MRConfig.LOCAL_DIR);
 
   public MROutputFiles() {
   }
+
+    
+    public void setSizeSpillFile(long l) {
+	sizeSpillFile = l;
+    }
+
+    /** 
+     * Get the size of all spill files 
+     */
+    public long getSizeSpillFiles() {
+	return sizeSpillFile;
+    }    
+    
+
 
   /**
    * Return the path to local map output file created earlier
@@ -146,8 +162,15 @@ public class MROutputFiles extends MapOutputFile {
     return lDirAlloc.getLocalPathForWrite(MRJobConfig.OUTPUT + "/spill"
         + spillNumber + ".out", size, getConf());
   }
+    
+    public Path getSpillFileForWrite(int spillNumber)
+	throws IOException {
+	return lDirAlloc.getLocalPathForWrite(MRJobConfig.OUTPUT + "/spill"
+					      + spillNumber + ".out", getConf());
+    }
 
-  /**
+
+/**
    * Return a local map spill index file created earlier
    *
    * @param spillNumber the number
@@ -175,7 +198,11 @@ public class MROutputFiles extends MapOutputFile {
     return lDirAlloc.getLocalPathForWrite(MRJobConfig.OUTPUT + "/spill"
         + spillNumber + ".out.index", size, getConf());
   }
-
+    
+    public Path getSpillIndexFileForWrite(int spillNumber) throws IOException {
+	return lDirAlloc.getLocalPathForWrite(MRJobConfig.OUTPUT + "/spill"
+					      + spillNumber + ".out.index", getConf());
+    }
   /**
    * Return a local reduce input file created earlier
    *
