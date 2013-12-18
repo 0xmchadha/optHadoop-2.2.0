@@ -125,7 +125,7 @@ class InMemoryMapOutput<K, V> extends MapOutput<K, V> {
 
   @Override
   public void commit() throws IOException {
-    merger.closeInMemoryFile(this);
+      //    merger.closeInMemoryFile(this);
   }
   
   @Override

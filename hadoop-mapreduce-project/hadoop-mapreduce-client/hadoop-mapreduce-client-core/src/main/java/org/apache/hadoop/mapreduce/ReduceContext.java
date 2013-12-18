@@ -38,6 +38,10 @@ public interface ReduceContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
 
   /** Start processing next unique key. */
   public boolean nextKey() throws IOException,InterruptedException;
+  
+  public void newIterator();
+  public VALUEIN getStoredVal() throws IOException, InterruptedException;
+  public void store(VALUEIN val) throws IOException, InterruptedException;
 
   /**
    * Iterate through the values for the current key, reusing the same value 
@@ -58,5 +62,7 @@ public interface ReduceContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
      * @throws IOException
      */
     void resetBackupStore() throws IOException;
+    
   }
 }
+

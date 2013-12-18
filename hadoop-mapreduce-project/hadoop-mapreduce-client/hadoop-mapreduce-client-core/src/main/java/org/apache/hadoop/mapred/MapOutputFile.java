@@ -45,6 +45,10 @@ public abstract class MapOutputFile implements Configurable {
   static final String MAP_OUTPUT_INDEX_SUFFIX_STRING = ".index";
   static final String REDUCE_INPUT_FILE_FORMAT_STRING = "%s/map_%d.out";
 
+    static final String MAP_OUTPUT_DATA_STRING = "file.out.data";
+    static final String MAP_OUTPUT_HASH_STRING = "file.out.hash";
+    
+
   public MapOutputFile() {
   }
     
@@ -80,6 +84,8 @@ public abstract class MapOutputFile implements Configurable {
    * Create a local map output file name on the same volume.
    */
   public abstract Path getOutputFileForWriteInVolume(Path existing);
+  public abstract Path getOutputDataForWriteInVolume(Path existing);
+  public abstract Path getOutputHashForWriteInVolume(Path existing);
 
   /**
    * Return the path to a local map output index file created earlier
@@ -112,6 +118,9 @@ public abstract class MapOutputFile implements Configurable {
    */
   public abstract Path getSpillFile(int spillNumber) throws IOException;
 
+    public abstract Path getSpillData(int spillNumber) throws IOException;
+    
+    public abstract Path getSpillHash(int spillNumber) throws IOException;
   /**
    * Create a local map spill file name.
    *

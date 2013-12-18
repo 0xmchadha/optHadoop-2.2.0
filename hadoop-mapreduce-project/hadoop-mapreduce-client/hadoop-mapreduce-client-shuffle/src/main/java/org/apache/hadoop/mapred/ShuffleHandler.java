@@ -575,20 +575,27 @@ public class ShuffleHandler extends AuxiliaryService {
       final String base =
           ContainerLocalizer.USERCACHE + "/" + user + "/"
               + ContainerLocalizer.APPCACHE + "/"
-              + ConverterUtils.toString(appID) + "/output" + "/" + mapId;
+              + ConverterUtils.toString(appID) + "/" + mapId;
       if (LOG.isDebugEnabled()) {
         LOG.debug("DEBUG0 " + base);
       }
+      
       // Index file
       Path indexFileName = lDirAlloc.getLocalPathToRead(
-          base + "/file.out.index", conf);
+          base + "/spill0.out.index", conf);
       // Map-output file
-      Path mapOutputFileName = lDirAlloc.getLocalPathToRead(
-          base + "/file.out", conf);
+      Path mapOutputFileName1 = lDirAlloc.getLocalPathToRead(
+          base + "/spill" + reduce + ".out" + ".hash", conf);
+      Path mapOutputFileName2 = lDirAlloc.getLocalPathToRead(
+          base + "/spill" + reduce + ".out" + ".data", conf);
+      
+      LOG.info("hash = " + mapOutputFileName1.toString());
+      
       if (LOG.isDebugEnabled()) {
-        LOG.debug("DEBUG1 " + base + " : " + mapOutputFileName + " : "
+        LOG.debug("DEBUG1 " + base + " : " + mapOutputFileName1 + " : " + mapOutputFileName2
             + indexFileName);
       }
+
       final IndexRecord info = 
         indexCache.getIndexInformation(mapId, reduce, indexFileName, user);
       final ShuffleHeader header =
@@ -596,39 +603,62 @@ public class ShuffleHandler extends AuxiliaryService {
       final DataOutputBuffer dob = new DataOutputBuffer();
       header.write(dob);
       ch.write(wrappedBuffer(dob.getData(), 0, dob.getLength()));
-      final File spillfile = new File(mapOutputFileName.toString());
-      RandomAccessFile spill;
+      final File spillfileHash = new File(mapOutputFileName1.toString());
+      final File spillfileData = new File(mapOutputFileName2.toString());
+      RandomAccessFile spill1, spill2;
       try {
-        spill = SecureIOUtils.openForRandomRead(spillfile, "r", user, null);
+	  spill1 = SecureIOUtils.openForRandomRead(spillfileHash, "r", user, null);
+	  spill2 = SecureIOUtils.openForRandomRead(spillfileData, "r", user, null);
       } catch (FileNotFoundException e) {
-        LOG.info(spillfile + " not found");
-        return null;
+	  LOG.info(spillfileHash + " or " + spillfileData + " not found");
+	  return null;
       }
-      ChannelFuture writeFuture;
-      if (ch.getPipeline().get(SslHandler.class) == null) {
-        final FadvisedFileRegion partition = new FadvisedFileRegion(spill,
-            info.startOffset, info.partLength, manageOsCache, readaheadLength,
-            readaheadPool, spillfile.getAbsolutePath());
-        writeFuture = ch.write(partition);
-        writeFuture.addListener(new ChannelFutureListener() {
-            // TODO error handling; distinguish IO/connection failures,
-            //      attribute to appropriate spill output
-          @Override
-          public void operationComplete(ChannelFuture future) {
-            partition.releaseExternalResources();
-          }
-        });
-      } else {
-        // HTTPS cannot be done with zero copy.
-        final FadvisedChunkedFile chunk = new FadvisedChunkedFile(spill,
-            info.startOffset, info.partLength, sslFileBufferSize,
-            manageOsCache, readaheadLength, readaheadPool,
-            spillfile.getAbsolutePath());
-        writeFuture = ch.write(chunk);
-      }
-      metrics.shuffleConnections.incr();
-      metrics.shuffleOutputBytes.incr(info.partLength); // optimistic
-      return writeFuture;
+      
+            ChannelFuture writeFuture1, writeFuture2;
+	    if (ch.getPipeline().get(SslHandler.class) == null) {
+		final FadvisedFileRegion partition1 = new FadvisedFileRegion(spill1,
+									     0, info.startOffset, manageOsCache, readaheadLength,
+									     readaheadPool, spillfileHash.getAbsolutePath());
+		final FadvisedFileRegion partition2 = new FadvisedFileRegion(spill2,
+									     0, info.partLength-info.startOffset, manageOsCache, readaheadLength,
+									     readaheadPool, spillfileData.getAbsolutePath());
+		
+		writeFuture1 = ch.write(partition1);
+		writeFuture2 = ch.write(partition2);
+		
+		writeFuture1.addListener(new ChannelFutureListener() {
+			// TODO error handling; distinguish IO/connection failures,
+			//      attribute to appropriate spill output
+			@Override
+			    public void operationComplete(ChannelFuture future) {
+			    partition1.releaseExternalResources();
+			}
+		    });
+		
+		writeFuture2.addListener(new ChannelFutureListener() {
+			// TODO error handling; distinguish IO/connection failures,
+			//      attribute to appropriate spill output
+			@Override
+			    public void operationComplete(ChannelFuture future) {
+			    partition2.releaseExternalResources();
+			}
+		    });
+	    } else {
+		LOG.info("https not supported");
+		// HTTPS cannot be done with zero copy.
+		/*        final FadvisedChunkedFile chunk = new FadvisedChunkedFile(spill,
+			  info.startOffset, info.partLength, sslFileBufferSize,
+			  manageOsCache, readaheadLength, readaheadPool,
+			  spillfile.getAbsolutePath());
+			  writeFuture = ch.write(chunk);
+			  }
+		*/
+		writeFuture2 = null;
+	    }
+	    metrics.shuffleConnections.incr();
+	    metrics.shuffleOutputBytes.incr(info.partLength); // optimistic
+	    
+	    return writeFuture2;
     }
 
     protected void sendError(ChannelHandlerContext ctx,

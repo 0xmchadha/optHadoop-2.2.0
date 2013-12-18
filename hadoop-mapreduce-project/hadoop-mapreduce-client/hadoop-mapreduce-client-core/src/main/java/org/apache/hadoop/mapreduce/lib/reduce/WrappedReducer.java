@@ -83,7 +83,7 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
     public boolean nextKeyValue() throws IOException, InterruptedException {
       return reduceContext.nextKeyValue();
     }
-
+    
     @Override
     public Counter getCounter(Enum counterName) {
       return reduceContext.getCounter(counterName);
@@ -297,6 +297,21 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
       return reduceContext.nextKey();
     }
     
+    @Override
+    public void newIterator() {
+	reduceContext.newIterator();
+    }
+    
+    @Override
+    public VALUEIN getStoredVal() throws IOException, InterruptedException {
+	return reduceContext.getStoredVal();
+    }
+    
+    @Override
+    public void store(VALUEIN val) throws IOException, InterruptedException {
+	reduceContext.store(val);
+    }
+
     @Override
     public boolean getProfileEnabled() {
       return reduceContext.getProfileEnabled();

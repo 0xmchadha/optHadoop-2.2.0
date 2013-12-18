@@ -69,6 +69,7 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringInterner;
 import org.apache.hadoop.util.StringUtils;
 
+import org.apache.hadoop.mapred.SharedHashMap;
 /**
  * Base class for tasks.
  */
@@ -1424,7 +1425,7 @@ abstract public class Task implements Writable, Configurable {
 
     private final Counters.Counter combineInputCounter;
 
-    public CombineValuesIterator(RawKeyValueIterator in,
+    public CombineValuesIterator(ShmKVIterator in,
         RawComparator<KEY> comparator, Class<KEY> keyClass,
         Class<VALUE> valClass, Configuration conf, Reporter reporter,
         Counters.Counter combineInputCounter) throws IOException {
@@ -1445,14 +1446,14 @@ abstract public class Task implements Writable, Configurable {
                         <INKEY,INVALUE,OUTKEY,OUTVALUE> reducer,
                       Configuration job,
                       org.apache.hadoop.mapreduce.TaskAttemptID taskId, 
-                      RawKeyValueIterator rIter,
+                      ShmKVIterator rIter,
                       org.apache.hadoop.mapreduce.Counter inputKeyCounter,
                       org.apache.hadoop.mapreduce.Counter inputValueCounter,
                       org.apache.hadoop.mapreduce.RecordWriter<OUTKEY,OUTVALUE> output, 
                       org.apache.hadoop.mapreduce.OutputCommitter committer,
                       org.apache.hadoop.mapreduce.StatusReporter reporter,
-                      RawComparator<INKEY> comparator,
-                      Class<INKEY> keyClass, Class<INVALUE> valueClass
+		      Class<INKEY> keyClass, Class<INVALUE> valueClass,
+		      SharedHashMap shm
   ) throws IOException, InterruptedException {
     org.apache.hadoop.mapreduce.ReduceContext<INKEY, INVALUE, OUTKEY, OUTVALUE> 
     reduceContext = 
@@ -1463,9 +1464,9 @@ abstract public class Task implements Writable, Configurable {
                                                               output, 
                                                               committer, 
                                                               reporter, 
-                                                              comparator, 
-                                                              keyClass, 
-                                                              valueClass);
+							      keyClass, 
+                                                              valueClass,
+							      shm);
 
     org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>.Context 
         reducerContext = 
@@ -1495,7 +1496,7 @@ abstract public class Task implements Writable, Configurable {
      * @param iterator the key/value pairs to use as input
      * @param collector the output collector
      */
-    public abstract void combine(RawKeyValueIterator iterator, 
+    public abstract void combine(ShmKVIterator iterator, 
                           OutputCollector<K,V> collector
                          ) throws IOException, InterruptedException, 
                                   ClassNotFoundException;
@@ -1551,7 +1552,7 @@ abstract public class Task implements Writable, Configurable {
     }
 
     @SuppressWarnings("unchecked")
-    public void combine(RawKeyValueIterator kvIter,
+    public void combine(ShmKVIterator kvIter,
                            OutputCollector<K,V> combineCollector
                            ) throws IOException {
       Reducer<K,V,K,V> combiner = 
@@ -1620,7 +1621,7 @@ abstract public class Task implements Writable, Configurable {
 
     @SuppressWarnings("unchecked")
     @Override
-    public void combine(RawKeyValueIterator iterator, 
+    public void combine(ShmKVIterator iterator, 
                  OutputCollector<K,V> collector
                  ) throws IOException, InterruptedException,
                           ClassNotFoundException {
@@ -1633,8 +1634,8 @@ abstract public class Task implements Writable, Configurable {
                                                 iterator, null, inputCounter, 
                                                 new OutputConverter(collector),
                                                 committer,
-                                                reporter, comparator, keyClass,
-                                                valueClass);
+                                                reporter, keyClass,
+                                                valueClass, null);
       reducer.run(reducerContext);
     } 
   }

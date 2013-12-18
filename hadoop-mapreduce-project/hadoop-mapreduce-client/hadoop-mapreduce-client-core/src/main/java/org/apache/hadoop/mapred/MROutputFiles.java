@@ -40,7 +40,7 @@ import org.apache.hadoop.mapreduce.MRJobConfig;
 public class MROutputFiles extends MapOutputFile {
 
     private long sizeSpillFile;
-
+    
   private LocalDirAllocator lDirAlloc =
     new LocalDirAllocator(MRConfig.LOCAL_DIR);
 
@@ -96,6 +96,17 @@ public class MROutputFiles extends MapOutputFile {
     return new Path(existing.getParent(), MAP_OUTPUT_FILENAME_STRING);
   }
 
+    @Override
+  public Path getOutputDataForWriteInVolume(Path existing) {
+    return new Path(existing.getParent(), MAP_OUTPUT_DATA_STRING);
+  }
+
+  @Override
+  public Path getOutputHashForWriteInVolume(Path existing) {
+    return new Path(existing.getParent(), MAP_OUTPUT_HASH_STRING);
+  }
+
+    
   /**
    * Return the path to a local map output index file created earlier
    *
@@ -147,7 +158,23 @@ public class MROutputFiles extends MapOutputFile {
     return lDirAlloc.getLocalPathToRead(MRJobConfig.OUTPUT + "/spill"
         + spillNumber + ".out", getConf());
   }
+    
+      @Override
+  public Path getSpillData(int spillNumber)
+      throws IOException {
+    return lDirAlloc.getLocalPathToRead(MRJobConfig.OUTPUT + "/spill"
+        + spillNumber + ".out.data", getConf());
+  }
 
+  @Override
+  public Path getSpillHash(int spillNumber)
+      throws IOException {
+    return lDirAlloc.getLocalPathToRead(MRJobConfig.OUTPUT + "/spill"
+        + spillNumber + ".out.hash", getConf());
+  }
+
+    
+    
   /**
    * Create a local map spill file name.
    *

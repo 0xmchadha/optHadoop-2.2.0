@@ -28,13 +28,14 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.DataInputBuffer;
+import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.RawComparator;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.io.serializer.Serializer;
 import org.apache.hadoop.mapred.BackupStore;
-import org.apache.hadoop.mapred.RawKeyValueIterator;
+import org.apache.hadoop.mapred.ShmKVIterator;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.OutputCommitter;
@@ -43,6 +44,13 @@ import org.apache.hadoop.mapreduce.ReduceContext;
 import org.apache.hadoop.mapreduce.StatusReporter;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.util.Progressable;
+
+import org.apache.hadoop.mapred.SharedHashMap;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+
 
 /**
  * The context passed to the {@link Reducer}.
@@ -56,7 +64,7 @@ import org.apache.hadoop.util.Progressable;
 public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     extends TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT> 
     implements ReduceContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
-  private RawKeyValueIterator input;
+  private ShmKVIterator input;
   private Counter inputValueCounter;
   private Counter inputKeyCounter;
   private RawComparator<KEYIN> comparator;
@@ -80,17 +88,28 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   private final TaskAttemptID taskid;
   private int currentKeyLength = -1;
   private int currentValueLength = -1;
+
+  private Serializer<VALUEIN> valueSerializer;
+  private DataOutputBuffer vbufop = new DataOutputBuffer();
+  private DataInputBuffer vbufip = new DataInputBuffer();
   
+  private SharedHashMap shmFinal;
+  
+  private static final Log LOG = LogFactory.getLog(ReduceContext.class.getName());
+  
+  private DataInputBuffer nextKey;
+  private DataInputBuffer nextVal;
+
   public ReduceContextImpl(Configuration conf, TaskAttemptID taskid,
-                           RawKeyValueIterator input, 
+                           ShmKVIterator input, 
                            Counter inputKeyCounter,
                            Counter inputValueCounter,
                            RecordWriter<KEYOUT,VALUEOUT> output,
                            OutputCommitter committer,
                            StatusReporter reporter,
-                           RawComparator<KEYIN> comparator,
                            Class<KEYIN> keyClass,
-                           Class<VALUEIN> valueClass
+                           Class<VALUEIN> valueClass,
+			   SharedHashMap shmFinal
                           ) throws InterruptedException, IOException{
     super(conf, taskid, output, committer, reporter);
     this.input = input;
@@ -102,11 +121,22 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     this.keyDeserializer.open(buffer);
     this.valueDeserializer = serializationFactory.getDeserializer(valueClass);
     this.valueDeserializer.open(buffer);
-    hasMore = input.next();
+    this.valueSerializer = serializationFactory.getSerializer(valueClass);
+    this.valueSerializer.open(vbufop);
+
     this.keyClass = keyClass;
     this.valueClass = valueClass;
     this.conf = conf;
     this.taskid = taskid;
+    this.shmFinal = shmFinal;
+
+    shmFinal.setReplaceValT(); 
+  }
+  
+  public void newIterator() {
+      hasMore = input.start();
+      nextKeyIsSame = false;
+      firstValue = false;
   }
 
   /** Start processing next unique key. */
@@ -128,44 +158,43 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
    * Advance to the next key/value pair.
    */
   @Override
-  public boolean nextKeyValue() throws IOException, InterruptedException {
-    if (!hasMore) {
-      key = null;
-      value = null;
-      return false;
-    }
-    firstValue = !nextKeyIsSame;
-    DataInputBuffer nextKey = input.getKey();
-    currentRawKey.set(nextKey.getData(), nextKey.getPosition(), 
-                      nextKey.getLength() - nextKey.getPosition());
-    buffer.reset(currentRawKey.getBytes(), 0, currentRawKey.getLength());
-    key = keyDeserializer.deserialize(key);
-    DataInputBuffer nextVal = input.getValue();
-    buffer.reset(nextVal.getData(), nextVal.getPosition(), nextVal.getLength());
-    value = valueDeserializer.deserialize(value);
+      public boolean nextKeyValue() throws IOException, InterruptedException {
+      
+      if (!hasMore) {
+	  key = null;
+	  value = null;
+	  return false;
+      }
+      firstValue = !nextKeyIsSame;
+      if (nextKeyIsSame == false) {
+	  nextKey = input.getKey();
+	  currentRawKey.set(nextKey.getData(), 0,
+			    nextKey.getLength());
+	  buffer.reset(currentRawKey.getBytes(), 0, currentRawKey.getLength());
+	  key = keyDeserializer.deserialize(key);
 
-    currentKeyLength = nextKey.getLength() - nextKey.getPosition();
-    currentValueLength = nextVal.getLength() - nextVal.getPosition();
-
-    if (isMarked) {
-      backupStore.write(nextKey, nextVal);
-    }
-
-    hasMore = input.next();
-    if (hasMore) {
-      nextKey = input.getKey();
-      nextKeyIsSame = comparator.compare(currentRawKey.getBytes(), 0, 
-                                     currentRawKey.getLength(),
-                                     nextKey.getData(),
-                                     nextKey.getPosition(),
-                                     nextKey.getLength() - nextKey.getPosition()
-                                         ) == 0;
-    } else {
-      nextKeyIsSame = false;
-    }
-    inputValueCounter.increment(1);
-    return true;
+	  currentKeyLength = nextKey.getLength();
+      }
+      
+      nextVal = input.getValue();
+      buffer.reset(nextVal.getData(), 0, nextVal.getLength());
+      value = valueDeserializer.deserialize(value);
+      currentValueLength = nextVal.getLength();
+      
+      if (isMarked) {
+	  backupStore.write(nextKey, nextVal);
+      }
+      
+      hasMore = input.next();
+      if (hasMore) {
+	  nextKeyIsSame = input.isNextKeySame();
+      } else {
+	  nextKeyIsSame = false;
+      }
+      inputValueCounter.increment(1);
+      return true;
   }
+  
 
   public KEYIN getCurrentKey() {
     return key;
@@ -176,6 +205,25 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     return value;
   }
   
+  public VALUEIN getStoredVal() throws IOException, InterruptedException {
+      buffer.reset(currentRawKey.getBytes(), 0, currentRawKey.getLength());
+      DataInputBuffer next = shmFinal.get(buffer);
+      if (next != null) {
+	  buffer.reset(next.getData(), 0, next.getLength());
+	  return valueDeserializer.deserialize(value);
+      }
+      return null;
+  }
+  
+  public void store(VALUEIN val) throws IOException, InterruptedException {
+      
+      buffer.reset(currentRawKey.getBytes(), 0, currentRawKey.getLength());
+      valueSerializer.serialize(val);
+      vbufip.reset(vbufop.getData(), vbufop.getLength());
+      shmFinal.put(buffer, vbufip); // since buffer doesn't change between the functions getStoredVal and store
+      vbufop.reset();
+  }
+
   BackupStore<KEYIN,VALUEIN> getBackupStore() {
     return backupStore;
   }
@@ -187,41 +235,11 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
 
     @Override
     public boolean hasNext() {
-      try {
-        if (inReset && backupStore.hasNext()) {
-          return true;
-        } 
-      } catch (Exception e) {
-        e.printStackTrace();
-        throw new RuntimeException("hasNext failed", e);
-      }
       return firstValue || nextKeyIsSame;
     }
 
     @Override
     public VALUEIN next() {
-      if (inReset) {
-        try {
-          if (backupStore.hasNext()) {
-            backupStore.next();
-            DataInputBuffer next = backupStore.nextValue();
-            buffer.reset(next.getData(), next.getPosition(), next.getLength());
-            value = valueDeserializer.deserialize(value);
-            return value;
-          } else {
-            inReset = false;
-            backupStore.exitResetMode();
-            if (clearMarkFlag) {
-              clearMarkFlag = false;
-              isMarked = false;
-            }
-          }
-        } catch (IOException e) {
-          e.printStackTrace();
-          throw new RuntimeException("next value iterator failed", e);
-        }
-      } 
-
       // if this is the first record, we don't need to advance
       if (firstValue) {
         firstValue = false;

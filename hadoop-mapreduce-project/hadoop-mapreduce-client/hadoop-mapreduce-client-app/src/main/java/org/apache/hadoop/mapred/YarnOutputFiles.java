@@ -45,7 +45,10 @@ public class YarnOutputFiles extends MapOutputFile {
   private JobConf conf;
 
   private static final String JOB_OUTPUT_DIR = "output";
-  private static final String SPILL_FILE_PATTERN = "%s_spill_%d.out";
+  private static final String SPILL_FILE_PATTERN = "%s/spill%d.out";
+  private static final String SPILL_DATA_PATTERN = "%s_spill_%d.out.data";
+  private static final String SPILL_HASH_PATTERN = "%s_spill_%d.out.hash";
+    
   private static final String SPILL_INDEX_FILE_PATTERN = SPILL_FILE_PATTERN
       + ".index";
 
@@ -105,6 +108,17 @@ public class YarnOutputFiles extends MapOutputFile {
         conf.get(JobContext.TASK_ATTEMPT_ID));
     return new Path(attemptOutputDir, MAP_OUTPUT_FILENAME_STRING);
   }
+    
+        @Override
+  public Path getOutputDataForWriteInVolume(Path existing) {
+    return new Path(existing.getParent(), MAP_OUTPUT_DATA_STRING);
+  }
+
+  @Override
+  public Path getOutputHashForWriteInVolume(Path existing) {
+    return new Path(existing.getParent(), MAP_OUTPUT_HASH_STRING);
+  }
+
 
   /**
    * Return the path to a local map output index file created earlier
@@ -157,6 +171,20 @@ public class YarnOutputFiles extends MapOutputFile {
         String.format(SPILL_FILE_PATTERN,
             conf.get(JobContext.TASK_ATTEMPT_ID), spillNumber), conf);
   }
+
+    public Path getSpillHash(int spillNumber) throws IOException {
+	return lDirAlloc.getLocalPathToRead(
+					    String.format(SPILL_HASH_PATTERN,
+							  conf.get(JobContext.TASK_ATTEMPT_ID), spillNumber), conf);
+	
+    }
+
+    public Path getSpillData(int spillNumber) throws IOException {
+	return lDirAlloc.getLocalPathToRead(
+					    String.format(SPILL_DATA_PATTERN,
+							  conf.get(JobContext.TASK_ATTEMPT_ID), spillNumber), conf);
+	
+    }
 
   /**
    * Create a local map spill file name.

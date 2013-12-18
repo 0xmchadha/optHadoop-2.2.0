@@ -678,7 +678,7 @@ public class TestGridMixClasses {
 
     ReduceContext<GridmixKey, GridmixRecord, NullWritable, GridmixRecord> reduceContext = new ReduceContextImpl<GridmixKey, GridmixRecord, NullWritable, GridmixRecord>(
             conf, taskid, input, counter, inputValueCounter, output, committer,
-            reporter, comparator, GridmixKey.class, GridmixRecord.class);
+            reporter, GridmixKey.class, GridmixRecord.class, null);
     // read for previous data
     reduceContext.nextKeyValue();
     org.apache.hadoop.mapreduce.Reducer<GridmixKey, GridmixRecord, NullWritable, GridmixRecord>.Context context = new WrappedReducer<GridmixKey, GridmixRecord, NullWritable, GridmixRecord>()
@@ -696,7 +696,7 @@ public class TestGridMixClasses {
     assertEquals(1593, record.getSize());
   }
 
-  protected class FakeRawKeyValueIterator implements RawKeyValueIterator {
+  protected class FakeShmKVIterator implements ShmKVIterator {
 
     int counter = 10;
 
@@ -889,7 +889,7 @@ public class TestGridMixClasses {
     conf.setBoolean(MRJobConfig.MAP_OUTPUT_COMPRESS, true);
     TaskAttemptID taskId = new TaskAttemptID();
 
-    RawKeyValueIterator input = new FakeRawKeyValueReducerIterator();
+    ShmKVIterator input = new FakeRawKeyValueReducerIterator();
 
     Counter counter = new GenericCounter();
     Counter inputValueCounter = new GenericCounter();
@@ -902,7 +902,7 @@ public class TestGridMixClasses {
 
     ReduceContext<GridmixKey, NullWritable, NullWritable, NullWritable> reducecontext = new ReduceContextImpl<GridmixKey, NullWritable, NullWritable, NullWritable>(
             conf, taskId, input, counter, inputValueCounter, output, committer,
-            reporter, comparator, GridmixKey.class, NullWritable.class);
+            reporter, GridmixKey.class, NullWritable.classm, null);
     org.apache.hadoop.mapreduce.Reducer<GridmixKey, NullWritable, NullWritable, NullWritable>.Context context = new WrappedReducer<GridmixKey, NullWritable, NullWritable, NullWritable>()
             .getReducerContext(reducecontext);
 
@@ -937,7 +937,7 @@ public class TestGridMixClasses {
 
   }
 
-  protected class FakeRawKeyValueReducerIterator implements RawKeyValueIterator {
+  protected class FakeRawKeyValueReducerIterator implements ShmKVIterator {
 
     int counter = 10;
 

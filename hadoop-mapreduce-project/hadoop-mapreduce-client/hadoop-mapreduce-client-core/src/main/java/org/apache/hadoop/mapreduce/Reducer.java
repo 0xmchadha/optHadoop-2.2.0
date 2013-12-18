@@ -150,7 +150,31 @@ public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
       context.write((KEYOUT) key, (VALUEOUT) value);
     }
   }
+  
+    @SuppressWarnings("unchecked")
+      protected void reduceShm(KEYIN key, Iterable<VALUEIN> values, Context context
+			       ) throws IOException, InterruptedException {
+      for(VALUEIN value: values) {
+	  context.write((KEYOUT) key, (VALUEOUT) value);
+      }
+  }
+  
+  public void runShm(Context context) throws IOException, InterruptedException {
+      setup(context);
+      while (context.nextKey()) {
+	  reduceShm(context.getCurrentKey(), context.getValues(), context);
+      }
+      cleanup(context);
+  }
+  
+  public void writeOutput(Context context) throws IOException, InterruptedException {
+      while (context.nextKey()) {
+	  //	 context.write((KEYOUT)context.getCurrentKey(), (VALUEOUT) context.getStoredVal());
+	  context.write((KEYOUT)context.getCurrentKey(), (VALUEOUT) context.getCurrentValue());
+      }
+  }
 
+  
   /**
    * Called once at the end of the task.
    */

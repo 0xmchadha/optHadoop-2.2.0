@@ -32,11 +32,11 @@ abstract class MergeThread<T,K,V> extends Thread {
   
   private static final Log LOG = LogFactory.getLog(MergeThread.class);
 
-  private AtomicInteger numPending = new AtomicInteger(0);
+  public AtomicInteger numPending = new AtomicInteger(0);
   private LinkedList<List<T>> pendingToBeMerged;
   protected final MergeManagerImpl<K,V> manager;
-  private final ExceptionReporter reporter;
-  private boolean closed = false;
+  public final ExceptionReporter reporterExcep;
+  public boolean closed = false;
   private final int mergeFactor;
   
   public MergeThread(MergeManagerImpl<K,V> manager, int mergeFactor,
@@ -44,13 +44,18 @@ abstract class MergeThread<T,K,V> extends Thread {
     this.pendingToBeMerged = new LinkedList<List<T>>();
     this.manager = manager;
     this.mergeFactor = mergeFactor;
-    this.reporter = reporter;
+    this.reporterExcep = reporter;
   }
   
-  public synchronized void close() throws InterruptedException {
+  public void close() throws InterruptedException {
     closed = true;
     waitForMerge();
     interrupt();
+    closeAll();
+  }
+
+
+  public void closeAll() {
   }
 
   public void startMerge(Set<T> inputs) {
@@ -70,11 +75,13 @@ abstract class MergeThread<T,K,V> extends Thread {
       }
     }
   }
-
-  public synchronized void waitForMerge() throws InterruptedException {
-    while (numPending.get() > 0) {
-      wait();
-    }
+  
+  public void waitForMerge() throws InterruptedException {
+      synchronized(numPending) {
+	  while (numPending.get() > 0) {
+	      numPending.wait();
+	  }
+      }
   }
 
   public void run() {
@@ -97,7 +104,7 @@ abstract class MergeThread<T,K,V> extends Thread {
         return;
       } catch(Throwable t) {
         numPending.set(0);
-        reporter.reportException(t);
+        reporterExcep.reportException(t);
         return;
       } finally {
         synchronized (this) {

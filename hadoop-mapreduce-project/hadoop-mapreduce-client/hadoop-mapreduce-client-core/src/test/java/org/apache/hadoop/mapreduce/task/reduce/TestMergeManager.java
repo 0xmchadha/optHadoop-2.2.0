@@ -116,10 +116,10 @@ public class TestMergeManager {
 
     // trigger the end of the second merge
     mergeComplete.await();
-
+    
     Assert.assertEquals(2, mgr.getNumMerges());
     Assert.assertEquals("exception reporter invoked",
-        0, reporter.getNumExceptions());
+			0, reporter.getNumExceptions());
   }
 
   private void fillOutput(InMemoryMapOutput<Text, Text> output) throws IOException {
@@ -134,18 +134,19 @@ public class TestMergeManager {
     private TestMergeThread mergeThread;
 
     public StubbedMergeManager(JobConf conf, ExceptionReporter reporter,
-        CyclicBarrier mergeStart, CyclicBarrier mergeComplete) {
-      super(null, conf, mock(LocalFileSystem.class), null, null, null, null,
-          null, null, null, null, reporter, null, mock(MapOutputFile.class));
+			       CyclicBarrier mergeStart, CyclicBarrier mergeComplete) {
+	super(null, null, conf, mock(LocalFileSystem.class), null, null, null, null,
+	      null, null, null, null, reporter, null, mock(MapOutputFile.class));
+	
       mergeThread.setSyncBarriers(mergeStart, mergeComplete);
     }
 
-    @Override
-    protected MergeThread<InMemoryMapOutput<Text, Text>, Text, Text> createInMemoryMerger() {
-      mergeThread = new TestMergeThread(this, getExceptionReporter());
-      return mergeThread;
-    }
-
+    //    @Override
+	//	protected MergeThread<InMemoryMapOutput<Text, Text>, Text, Text> createInMemoryMerger() {
+    //	mergeThread = new TestMergeThread(this, getExceptionReporter());
+    //	return mergeThread;
+    //    }
+    
     public int getNumMerges() {
       return mergeThread.getNumMerges();
     }
@@ -217,7 +218,7 @@ public class TestMergeManager {
     MapOutputFile mapOutputFile = new MROutputFiles();
     FileSystem fs = FileSystem.getLocal(jobConf);
     MergeManagerImpl<IntWritable, IntWritable> manager =
-      new MergeManagerImpl<IntWritable, IntWritable>(null, jobConf, fs, null
+	new MergeManagerImpl<IntWritable, IntWritable>(null, null, jobConf, fs, null
         , null, null, null, null, null, null, null, null, null, mapOutputFile);
 
     MergeThread<MapOutput<IntWritable, IntWritable>, IntWritable, IntWritable>

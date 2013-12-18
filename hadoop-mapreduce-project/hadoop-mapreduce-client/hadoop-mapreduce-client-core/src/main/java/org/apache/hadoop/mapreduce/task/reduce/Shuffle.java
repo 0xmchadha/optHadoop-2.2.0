@@ -78,10 +78,10 @@ public class Shuffle<K, V> implements ShuffleConsumerPlugin<K, V>, ExceptionRepo
 
   protected MergeManager<K, V> createMergeManager(
       ShuffleConsumerPlugin.Context context) {
-    return new MergeManagerImpl<K, V>(reduceId, jobConf, context.getLocalFS(),
-        context.getLocalDirAllocator(), reporter, context.getCodec(),
-        context.getCombinerClass(), context.getCombineCollector(), 
-        context.getSpilledRecordsCounter(),
+      return new MergeManagerImpl<K, V>(reduceId, reduceTask, jobConf, context.getLocalFS(),
+        context.getLocalDirAllocator(), reporter, 
+        context.getCodec(), context.getCombinerClass(), 
+        context.getCombineCollector(), context.getSpilledRecordsCounter(),
         context.getReduceCombineInputCounter(),
         context.getMergedMapOutputsCounter(), this, context.getMergePhase(),
         context.getMapOutputFile());
@@ -142,7 +142,7 @@ public class Shuffle<K, V> implements ShuffleConsumerPlugin<K, V>, ExceptionRepo
     // Finish the on-going merges...
     RawKeyValueIterator kvIter = null;
     try {
-      kvIter = merger.close();
+	merger.close();
     } catch (Throwable e) {
       throw new ShuffleError("Error while doing final merge " , e);
     }
@@ -155,7 +155,7 @@ public class Shuffle<K, V> implements ShuffleConsumerPlugin<K, V>, ExceptionRepo
       }
     }
     
-    return kvIter;
+    return null;
   }
 
   @Override

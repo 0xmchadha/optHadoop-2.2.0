@@ -68,6 +68,21 @@ class ChainReduceContextImpl<KEYIN, VALUEIN, KEYOUT, VALUEOUT> implements
   }
 
   @Override
+  public void newIterator() {
+      base.newIterator();
+  }
+  
+  @Override
+  public VALUEIN getStoredVal() throws IOException, InterruptedException {
+      return base.getStoredVal();
+  }
+  
+  @Override
+  public void store(VALUEIN val) throws IOException, InterruptedException {
+      base.store(val);
+  }
+  
+  @Override
   public Counter getCounter(Enum<?> counterName) {
     return base.getCounter(counterName);
   }
