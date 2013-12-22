@@ -493,7 +493,6 @@ public class ReduceTask extends Task {
 	}
       
 	public void startProcessing(SharedHashMap shm) throws IOException, InterruptedException {
-	    LOG.info("start processing");
 	    rawIter = shm.getIterator();
 	    reducerContext.newIterator();
 
@@ -509,11 +508,9 @@ public class ReduceTask extends Task {
 	}
 	    
 	public void writeOutput() throws IOException, InterruptedException {
-	    LOG.info("write output");
 	    rawIter = shmFinal.getFinalIterator();
 	    reducerContext.newIterator();
 		
-	    //	    ((org.apache.hadoop.mapreduce.task.ReduceContextImpl)reducerContext).newIterator();
 	    reducer.writeOutput(reducerContext);
 		
 	    trackedRW.close(reducerContext);

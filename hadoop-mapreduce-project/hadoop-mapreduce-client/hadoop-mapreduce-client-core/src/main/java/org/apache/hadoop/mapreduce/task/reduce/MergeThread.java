@@ -48,13 +48,13 @@ abstract class MergeThread<T,K,V> extends Thread {
   }
   
   public void close() throws InterruptedException {
-    closed = true;
-    waitForMerge();
-    interrupt();
-    closeAll();
+      closed = true;
+      closeAll();
+      waitForMerge();
+    //    interrupt();
+
   }
-
-
+  
   public void closeAll() {
   }
 

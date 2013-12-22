@@ -70,6 +70,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   private RawComparator<KEYIN> comparator;
   private KEYIN key;                                  // current key
   private VALUEIN value;                              // current value
+  private VALUEIN value_store;                        // value to be stored in shmfinal
   private boolean firstValue = false;                 // first value in key
   private boolean nextKeyIsSame = false;              // more w/ this key
   private boolean hasMore;                            // more in file
@@ -138,22 +139,22 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       nextKeyIsSame = false;
       firstValue = false;
   }
-
+  
   /** Start processing next unique key. */
   public boolean nextKey() throws IOException,InterruptedException {
-    while (hasMore && nextKeyIsSame) {
-      nextKeyValue();
-    }
-    if (hasMore) {
-      if (inputKeyCounter != null) {
-        inputKeyCounter.increment(1);
+      while (hasMore && nextKeyIsSame) {
+	  nextKeyValue();
       }
-      return nextKeyValue();
-    } else {
-      return false;
-    }
+      if (hasMore) {
+	  if (inputKeyCounter != null) {
+	      inputKeyCounter.increment(1);
+	  }
+	  return nextKeyValue();
+      } else {
+	  return false;
+      }
   }
-
+  
   /**
    * Advance to the next key/value pair.
    */
@@ -165,27 +166,28 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
 	  value = null;
 	  return false;
       }
+      
       firstValue = !nextKeyIsSame;
+      
       if (nextKeyIsSame == false) {
 	  nextKey = input.getKey();
 	  currentRawKey.set(nextKey.getData(), 0,
 			    nextKey.getLength());
 	  buffer.reset(currentRawKey.getBytes(), 0, currentRawKey.getLength());
 	  key = keyDeserializer.deserialize(key);
-
+	  
 	  currentKeyLength = nextKey.getLength();
       }
       
       nextVal = input.getValue();
+      
       buffer.reset(nextVal.getData(), 0, nextVal.getLength());
       value = valueDeserializer.deserialize(value);
+
       currentValueLength = nextVal.getLength();
       
-      if (isMarked) {
-	  backupStore.write(nextKey, nextVal);
-      }
-      
       hasMore = input.next();
+
       if (hasMore) {
 	  nextKeyIsSame = input.isNextKeySame();
       } else {
@@ -197,12 +199,12 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   
 
   public KEYIN getCurrentKey() {
-    return key;
+      return key;
   }
-
+  
   @Override
-  public VALUEIN getCurrentValue() {
-    return value;
+      public VALUEIN getCurrentValue() {
+      return value;
   }
   
   public VALUEIN getStoredVal() throws IOException, InterruptedException {
@@ -210,22 +212,22 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       DataInputBuffer next = shmFinal.get(buffer);
       if (next != null) {
 	  buffer.reset(next.getData(), 0, next.getLength());
-	  return valueDeserializer.deserialize(value);
+	  value_store = valueDeserializer.deserialize(value_store);
+	  return value_store;
       }
       return null;
   }
   
   public void store(VALUEIN val) throws IOException, InterruptedException {
-      
       buffer.reset(currentRawKey.getBytes(), 0, currentRawKey.getLength());
       valueSerializer.serialize(val);
       vbufip.reset(vbufop.getData(), vbufop.getLength());
-      shmFinal.put(buffer, vbufip); // since buffer doesn't change between the functions getStoredVal and store
+      shmFinal.put(buffer, vbufip); 
       vbufop.reset();
   }
 
   BackupStore<KEYIN,VALUEIN> getBackupStore() {
-    return backupStore;
+      return backupStore;
   }
   
   protected class ValueIterator implements ReduceContext.ValueIterator<VALUEIN> {
@@ -241,16 +243,17 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     @Override
     public VALUEIN next() {
       // if this is the first record, we don't need to advance
-      if (firstValue) {
-        firstValue = false;
-        return value;
-      }
-      // if this isn't the first record and the next key is different, they
-      // can't advance it here.
-      if (!nextKeyIsSame) {
-        throw new NoSuchElementException("iterate past last value");
-      }
-      // otherwise, go to the next key/value pair
+	if (firstValue) {
+	    firstValue = false;
+	    return value;
+	}
+	// if this isn't the first record and the next key is different, they
+	// can't advance it here.
+	if (!nextKeyIsSame) {
+	    throw new NoSuchElementException("iterate past last value");
+	}
+	
+	// otherwise, go to the next key/value pair
       try {
         nextKeyValue();
         return value;

@@ -179,7 +179,6 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
       }
   
   public void closeOnDiskFile(CompressAwarePath file) {
-      LOG.info(file.toString());
       shmrun.numPending.incrementAndGet();
       SharedHashMap shMap = new SharedHashMap(file.toString(), false);
       
@@ -187,12 +186,10 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 	  shmList.add(shMap);
 	  shmList.notify();
       }
-      //      onDiskMerger.startMerge(shmList);
   }
   
   @Override
   public RawKeyValueIterator close() throws Throwable {
-      // Wait for on-going merges to complete
       shmrun.close();
       return null;
   }
@@ -218,19 +215,17 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 	  while (true) {
 	      try {
 		  // Wait for notification to start the merge...
-		  while(shmList.size() <= 0 && closed == false) {
-		      synchronized (shmList) {
-			  LOG.info("waiting shmlist");
+		  synchronized (shmList) {
+		      while(shmList.size() <= 0 && closed == false) {
 			  shmList.wait();
-			  LOG.info("shmlist out");
 		      }
 		  }
-		  
+
 		  if (closed == true) {
 		      numPending.set(0);
 		      return;
 		  }
-
+		  
 		  while (shmList.size() > 0) {
 		      SharedHashMap shm;
 		      synchronized (shmList) {
@@ -250,9 +245,8 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 		  return;
 	      } finally {
 		  ///		  synchronized (this) {
-		  numPending.decrementAndGet();
 		  synchronized (numPending) {
-		      LOG.info("notifying");
+		      numPending.decrementAndGet();
 		      numPending.notifyAll();
 		  }
 	      }
