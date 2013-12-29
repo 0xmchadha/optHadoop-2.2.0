@@ -876,7 +876,6 @@ public class MapTask extends Task {
     private MapOutputFile mapOutputFile;
     private Progress sortPhase;
     private Counters.Counter spilledRecordsCounter;
-    public int count_words0, count_words1, count_words2, count_words3;
 
     public MapOutputBuffer() {
     }
@@ -963,20 +962,6 @@ public class MapTask extends Task {
 				      partition + ")");
 	    }
 	    mapWriter.get(partition).append(key, value);
-	    switch(partition) {
-	    case 0: 
-		count_words0++;
-		break;
-	    case 1:
-		count_words1++;
-		break;
-	    case 2:
-		count_words2++;
-		break;
-	    case 3:
-		count_words3++;
-		break;
-	    }
 	}
     
     private TaskAttemptID getTaskID() {
@@ -993,11 +978,6 @@ public class MapTask extends Task {
 	Path indexFileName;
 	IFile.shmWriter<K, V> writer;
 	
-	LOG.info("MC: count = " + count_words0);
-	LOG.info("MC: count = " + count_words1);
-	LOG.info("MC: count = " + count_words2);
-	LOG.info("MC: count = " + count_words3);
-
 	for (int i = 0; i < partitions; i++) {
 	    writer = mapWriter.get(i);
 	    writer.close();

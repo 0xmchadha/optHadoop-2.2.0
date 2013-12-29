@@ -589,8 +589,6 @@ public class ShuffleHandler extends AuxiliaryService {
       Path mapOutputFileName2 = lDirAlloc.getLocalPathToRead(
           base + "/spill" + reduce + ".out" + ".data", conf);
       
-      LOG.info("hash = " + mapOutputFileName1.toString());
-      
       if (LOG.isDebugEnabled()) {
         LOG.debug("DEBUG1 " + base + " : " + mapOutputFileName1 + " : " + mapOutputFileName2
             + indexFileName);
