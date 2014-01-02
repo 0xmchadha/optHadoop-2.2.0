@@ -230,7 +230,23 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    setAvailableAddress(hma, STARTING_ADDRESS);
 	    setAvailableAddress(dma, STARTING_ADDRESS);
 	}
+	
+	public createHash(String fileName, int hash_size) throws IOException {
+	    hashSize = hash_size;
+	    createHash(fileName);
+	}
 
+	public rename() {
+	    hmf.close();
+	    dmf.close();
+	    File hashFile = new File(groupName + ".hash");
+	    File hashTmpFile = new File(groupName + ".hash" + ".tmp");
+	    hashFile.renameTo(hashTmpFile);
+	    File dataFile = new File(groupName + ".data");
+	    File dataTmpFile = new File(groupName + ".data" + ".tmp");
+	    dataFile.renameTo(dataTmpFile);
+	}
+	
 	private boolean keyMatches(int dataAddress, keyInfo key) {
 	    int len = dma.getInt(dataAddress);
 	    int keyOffset = dataAddress + 4;
@@ -511,7 +527,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		System.gc();
 	    }
 	}
-
+	
 	private DataInputBuffer retValBuf(int dataLoc) {
 	    int keyLen, valLen;
 	    byte[] valp;
@@ -862,7 +878,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		if (m < 50)
 		    return;
 		*/
-		LOG.info("creating shm");
+		//		LOG.info("creating shm");
 		lookupCuckoo = new lookupHash(shmFile);
 	    }
 	} catch (IOException e) {
@@ -870,12 +886,20 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	}
     }
     
+    public SharedHashMap(String shmFile, long hash_size) {
+	createCuckoo = new createHash(shmFile, hash_size);
+    }
+
     public void put(DataInputBuffer key, DataInputBuffer value) throws IOException {
 	createCuckoo.put(key, value);
     }
 
     public DataInputBuffer get(DataInputBuffer key) {
 	return createCuckoo.get(key);
+    }
+    
+    public void rename() {
+	createCuckoo.rename();
     }
 
     public void setReplaceValT() {

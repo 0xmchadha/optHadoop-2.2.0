@@ -904,7 +904,7 @@ public class MapTask extends Task {
       
       for (int i = 0; i < partitions; i++) {
 	  spillFile = mapOutputFile.getSpillFileForWrite(i);
-	  writer = new shmWriter<K, V>(job, spillFile, keyClass, valClass, codec, null);
+	  writer = new shmWriter<K, V>(job, spillFile, keyClass, valClass, codec, null, 0);
 	  mapWriter.add(writer);
       }
       
@@ -976,7 +976,22 @@ public class MapTask extends Task {
 	IndexRecord rec = new IndexRecord();
 	SpillRecord sr = new SpillRecord(partitions);
 	Path indexFileName;
-	IFile.shmWriter<K, V> writer;
+	IFile.shmWriter<K, V> writer, newWriter;
+	
+	if (combiner != null) {
+	    for (int i = 0; i < partitions; i++) {
+		writer = mapWriter.get(i);
+		long hashSize = writer.getHashSize();
+		writer.rename();
+		spillFile = mapOutputFile.getSpillFileForWrite(i);
+		newWriter = new shmWriter<K, V>(job, spillFile, keyClass, valClass, codec, null, hashSize);
+		mapWriter.set(i, newWriter);
+		combineCollector.setWriter(newWriter);
+		combinerRunner.combine(writer.getIterator(), combineCollector);
+		writer = null;
+		System.gc();
+	    }
+	}
 	
 	for (int i = 0; i < partitions; i++) {
 	    writer = mapWriter.get(i);

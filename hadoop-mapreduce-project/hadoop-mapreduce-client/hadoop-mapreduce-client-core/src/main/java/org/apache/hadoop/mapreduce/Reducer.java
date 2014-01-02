@@ -159,18 +159,30 @@ public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
       }
   }
   
-  public void runShm(Context context) throws IOException, InterruptedException {
-      setup(context);
-      while (context.nextKey()) {
-	  reduceShm(context.getCurrentKey(), context.getValues(), context);
-      }
-      cleanup(context);
-  }
+    public void init() {
+    }
+    
+    public void writeReduceOp(KEYIN key, Context context) {
+    }
+
+    public void runShm(Context context) throws IOException, InterruptedException {
+	setup(context);
+	while (context.nextKey()) {
+	    init();
+	    reduceShm(context.getCurrentKey(), context.getValues(), context);
+	    writeReduceOp(context.getCurrentKey(), context);
+	}
+	cleanup(context);
+    }
   
+  public void writeReduceOp(KEYIN key, Context context) throws IOException, InterruptedException {
+  }
+
   public void writeOutput(Context context) throws IOException, InterruptedException {
       while (context.nextKey()) {
 	  //	 context.write((KEYOUT)context.getCurrentKey(), (VALUEOUT) context.getStoredVal());
-	  context.write((KEYOUT)context.getCurrentKey(), (VALUEOUT) context.getCurrentValue());
+	  //	  context.write((KEYOUT)context.getCurrentKey(), (VALUEOUT) context.getCurrentValue());
+	  writeReduceOp(context.getCurrentKey(), context);
       }
   }
 

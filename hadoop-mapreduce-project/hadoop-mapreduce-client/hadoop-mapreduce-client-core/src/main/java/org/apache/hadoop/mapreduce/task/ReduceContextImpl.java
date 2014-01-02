@@ -94,7 +94,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   private DataOutputBuffer vbufop = new DataOutputBuffer();
   private DataInputBuffer vbufip = new DataInputBuffer();
   
-  private SharedHashMap shmFinal;
+  //  private SharedHashMap shmFinal;
   
   private static final Log LOG = LogFactory.getLog(ReduceContext.class.getName());
   
@@ -109,9 +109,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
                            OutputCommitter committer,
                            StatusReporter reporter,
                            Class<KEYIN> keyClass,
-                           Class<VALUEIN> valueClass,
-			   SharedHashMap shmFinal
-                          ) throws InterruptedException, IOException{
+                           Class<VALUEIN> valueClass) throws InterruptedException, IOException{
     super(conf, taskid, output, committer, reporter);
     this.input = input;
     this.inputKeyCounter = inputKeyCounter;
@@ -129,9 +127,6 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     this.valueClass = valueClass;
     this.conf = conf;
     this.taskid = taskid;
-    this.shmFinal = shmFinal;
-
-    shmFinal.setReplaceValT(); 
   }
   
   public void newIterator() {
@@ -153,6 +148,16 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       } else {
 	  return false;
       }
+  }
+  
+  public DataInputBuffer getKeyBuf() {
+      buffer.reset(currentRawKey.getBytes(), 0, currentRawKey.getLength());
+      return buffer;
+  }
+  
+  public KEYIN deserializedKey(DataInputBuffer key) {
+      buffer.reset(key.getData(), 0, key.getLength());
+      return keyDeserializer.deserialize(null);
   }
   
   /**
@@ -207,7 +212,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       return value;
   }
   
-  public VALUEIN getStoredVal() throws IOException, InterruptedException {
+  /*  public VALUEIN getStoredVal() throws IOException, InterruptedException {
       buffer.reset(currentRawKey.getBytes(), 0, currentRawKey.getLength());
       DataInputBuffer next = shmFinal.get(buffer);
       if (next != null) {
@@ -225,7 +230,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       shmFinal.put(buffer, vbufip); 
       vbufop.reset();
   }
-
+  */
   BackupStore<KEYIN,VALUEIN> getBackupStore() {
       return backupStore;
   }

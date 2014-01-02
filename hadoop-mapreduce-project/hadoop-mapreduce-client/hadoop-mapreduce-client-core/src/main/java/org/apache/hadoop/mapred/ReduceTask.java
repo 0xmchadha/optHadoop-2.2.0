@@ -429,11 +429,14 @@ public class ReduceTask extends Task {
 	public Progress progress;
 	// make a reducer
 	//	public org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
-	public org.apache.hadoop.mapreduce.Reducer reducer;
+	public ArrayList<org.apache.hadoop.mapreduce.Reducer> reducerList;
 	//	public org.apache.hadoop.mapreduce.RecordWriter<OUTKEY,OUTVALUE> trackedRW;
 	public org.apache.hadoop.mapreduce.RecordWriter trackedRW;
 	private SharedHashMap shmFinal; 
-	
+	private int index = 0;
+	private DataInputBuffer indexInpBuffer = new DataInputBuffer();
+	private byte[] result = new byte[4];
+
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
 	    iterativeComputing(JobConf job, 
 			       final TaskUmbilicalProtocol umbilical,
@@ -474,24 +477,61 @@ public class ReduceTask extends Task {
 		    }
 		};
 	    
+	    indexInpBuffer.reset(result, 0, 4); 
 	    shmFinal = new SharedHashMap("shmFinal_" + getTaskID(), true);
 	    // make a task context so we can get the classes
 	    org.apache.hadoop.mapreduce.TaskAttemptContext taskContext =
 		new org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl(job, getTaskID(), reporter);
 	    
-	    reducer = (org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>)
-		ReflectionUtils.newInstance(taskContext.getReducerClass(), job);
+	    reducerList = new ArrayList<(org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>)>();
+
 	    trackedRW = new NewTrackingRecordWriter<OUTKEY, OUTVALUE>(ReduceTask.this, taskContext);
 	      
 	    job.setBoolean("mapred.skip.on", isSkipping());
-	    reducerContext = createReduceContext(reducer, job, getTaskID(),
+	    reducerContext = createReduceContext(null, job, getTaskID(),
 						 rIter, reduceInputKeyCounter, 
 						 reduceInputValueCounter, 
 						 trackedRW, committer,
 						 reporter, keyClass,
-						 valueClass, shmFinal);
+						 valueClass);
 	}
       
+	private void modifyInputBuffer(int i) {
+	    result[0] = (byte) (i >> 24);
+	    result[1] = (byte) (i >> 16);
+	    result[2] = (byte) (i >> 8);
+	    result[3] = (byte) (i /*>> 0*/);
+	}
+	
+	private int getIndex(DataInputBuffer input) {
+	    if (input == null)
+		return -1;
+	    byte[] result = input.getData();
+	    int index;
+	    index = (result[0] << 24 | result[1] << 16 | result[2] << 8 | result[3]);
+
+	    return index;
+	}
+	
+	public void runShm(Context context) throws IOException, InterruptedException {
+	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
+	    setup(context);
+	    while (context.nextKey()) {
+		keyBuf = context.getKeyBuf();
+		index = getIndex(shmFinal.get(keyBuf));
+		if (index == -1) {
+		    reducer = (org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>) ReflectionUtils.newInstance(taskContext.getReducerClass(), job);
+		    reducerList.add(reducer);
+		    modifyInputBuffer(index++)
+		    shmFinal.put(keyBuf, indexInpBuffer);
+		} else
+		    reducer = reducerList.get(index);
+		
+		reducer.reduceShm(context.getCurrentKey(), context.getValues(), context);
+	    }
+	    cleanup(context);
+	}
+
 	public void startProcessing(SharedHashMap shm) throws IOException, InterruptedException {
 	    rawIter = shm.getIterator();
 	    reducerContext.newIterator();
@@ -508,11 +548,21 @@ public class ReduceTask extends Task {
 	}
 	    
 	public void writeOutput() throws IOException, InterruptedException {
-	    rawIter = shmFinal.getFinalIterator();
-	    reducerContext.newIterator();
-		
-	    reducer.writeOutput(reducerContext);
-		
+	    ShmKVIterator iter;
+	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
+
+	    iter = shmFinal.getFinalIterator();
+	    //reducerContext.newIterator();
+	    iter.start();
+	    do {
+		index = getIndex(iter.getValue());
+		reducer = reducerList.get(index);
+		INKEY key = reducerContext.deserializedKey(iter.getKey());
+		reducer.writeReduceOp(key, reducerContext);
+	    } while (iter.next());
+
+	    //	    reducer.writeOutput(reducerContext);
+	    
 	    trackedRW.close(reducerContext);
 	}
     }

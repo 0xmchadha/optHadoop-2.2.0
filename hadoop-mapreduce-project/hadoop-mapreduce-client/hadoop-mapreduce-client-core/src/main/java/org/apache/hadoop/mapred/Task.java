@@ -52,7 +52,7 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
-import org.apache.hadoop.mapred.IFile.Writer;
+import org.apache.hadoop.mapred.IFile.shmWriter;
 import org.apache.hadoop.mapreduce.FileSystemCounter;
 import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.TaskCounter;
@@ -1281,7 +1281,7 @@ abstract public class Task implements Writable, Configurable {
   @InterfaceStability.Unstable
   public static class CombineOutputCollector<K extends Object, V extends Object> 
   implements OutputCollector<K, V> {
-    private Writer<K, V> writer;
+    private shmWriter<K, V> writer;
     private Counters.Counter outCounter;
     private Progressable progressable;
     private long progressBar;
@@ -1292,7 +1292,7 @@ abstract public class Task implements Writable, Configurable {
       progressBar = conf.getLong(MRJobConfig.COMBINE_RECORDS_BEFORE_PROGRESS, DEFAULT_COMBINE_RECORDS_BEFORE_PROGRESS);
     }
     
-    public synchronized void setWriter(Writer<K, V> writer) {
+    public synchronized void setWriter(shmWriter<K, V> writer) {
       this.writer = writer;
     }
 
@@ -1452,9 +1452,7 @@ abstract public class Task implements Writable, Configurable {
                       org.apache.hadoop.mapreduce.RecordWriter<OUTKEY,OUTVALUE> output, 
                       org.apache.hadoop.mapreduce.OutputCommitter committer,
                       org.apache.hadoop.mapreduce.StatusReporter reporter,
-		      Class<INKEY> keyClass, Class<INVALUE> valueClass,
-		      SharedHashMap shm
-  ) throws IOException, InterruptedException {
+		      Class<INKEY> keyClass, Class<INVALUE> valueClass) throws IOException, InterruptedException {
     org.apache.hadoop.mapreduce.ReduceContext<INKEY, INVALUE, OUTKEY, OUTVALUE> 
     reduceContext = 
       new ReduceContextImpl<INKEY, INVALUE, OUTKEY, OUTVALUE>(job, taskId, 
@@ -1465,8 +1463,7 @@ abstract public class Task implements Writable, Configurable {
                                                               committer, 
                                                               reporter, 
 							      keyClass, 
-                                                              valueClass,
-							      shm);
+                                                              valueClass);
 
     org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>.Context 
         reducerContext = 
@@ -1635,8 +1632,8 @@ abstract public class Task implements Writable, Configurable {
                                                 new OutputConverter(collector),
                                                 committer,
                                                 reporter, keyClass,
-                                                valueClass, null);
-      reducer.run(reducerContext);
+                                                valueClass);
+      reducer.runShm(reducerContext);
     } 
   }
 

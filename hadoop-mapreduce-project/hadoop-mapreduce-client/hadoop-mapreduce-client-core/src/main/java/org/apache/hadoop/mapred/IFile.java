@@ -80,14 +80,18 @@ public class IFile {
 	public shmWriter(Configuration conf, Path shmFile, 
 			 Class<K> keyClass, Class<V> valueClass,
 			 CompressionCodec codec,
-			 Counters.Counter writesCounter) throws IOException {
+			 Counters.Counter writesCounter, long hash_size) throws IOException {
     
 	    this.keyClass = keyClass;
 	    this.valueClass = valueClass;
 	    LOG = LogFactory.getLog(IFile.class.getName());
 	    SerializationFactory serializationFactory = new SerializationFactory(conf);
 	    this.writtenRecordsCounter = writesCounter;
-	    shm = new SharedHashMap(shmFile.toString(), true);
+	    if (hash_size == 0)
+		shm = new SharedHashMap(shmFile.toString(), true);
+	    else 
+		shm = new SharedhHashMap(shmFile.toString(), hash_size);
+
 	    this.keySerializer = serializationFactory.getSerializer(keyClass);
 	    this.keySerializer.open(kbuf);
 	    this.valueSerializer = serializationFactory.getSerializer(valueClass);
@@ -158,6 +162,10 @@ public class IFile {
       
 	public long getHashSize() {
 	    return shm.getHashSize();
+	}
+	
+	public ShmKVIterator getIterator() {
+	    return shm.getFinalIterator();
 	}
     }
 
