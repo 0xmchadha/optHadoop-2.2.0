@@ -119,52 +119,52 @@ import java.util.Iterator;
  * @see Partitioner
  */
 @Checkpointable
-@InterfaceAudience.Public
-@InterfaceStability.Stable
-public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
-
-  /**
-   * The <code>Context</code> passed on to the {@link Reducer} implementations.
-   */
-  public abstract class Context 
-    implements ReduceContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
-  }
-
-  /**
-   * Called once at the start of the task.
-   */
-  protected void setup(Context context
-                       ) throws IOException, InterruptedException {
-    // NOTHING
-  }
-
-  /**
-   * This method is called once for each key. Most applications will define
-   * their reduce class by overriding this method. The default implementation
-   * is an identity function.
-   */
-  @SuppressWarnings("unchecked")
-  protected void reduce(KEYIN key, Iterable<VALUEIN> values, Context context
-                        ) throws IOException, InterruptedException {
-    for(VALUEIN value: values) {
-      context.write((KEYOUT) key, (VALUEOUT) value);
+    @InterfaceAudience.Public
+    @InterfaceStability.Stable
+    public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
+    
+    /**
+     * The <code>Context</code> passed on to the {@link Reducer} implementations.
+     */
+    public abstract class Context 
+	implements ReduceContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
     }
-  }
-  
+
+    /**
+     * Called once at the start of the task.
+     */
+    public void setup(Context context
+		      ) throws IOException, InterruptedException {
+	// NOTHING
+    }
+    
+    /**
+     * This method is called once for each key. Most applications will define
+     * their reduce class by overriding this method. The default implementation
+     * is an identity function.
+     */
     @SuppressWarnings("unchecked")
-      protected void reduceShm(KEYIN key, Iterable<VALUEIN> values, Context context
-			       ) throws IOException, InterruptedException {
-      for(VALUEIN value: values) {
-	  context.write((KEYOUT) key, (VALUEOUT) value);
-      }
-  }
-  
+	protected void reduce(KEYIN key, Iterable<VALUEIN> values, Context context
+			      ) throws IOException, InterruptedException {
+	for(VALUEIN value: values) {
+	    context.write((KEYOUT) key, (VALUEOUT) value);
+	}
+    }
+    
+    @SuppressWarnings("unchecked")
+	public void reduceShm(KEYIN key, Iterable<VALUEIN> values, Context context
+			      ) throws IOException, InterruptedException {
+	for(VALUEIN value: values) {
+	    context.write((KEYOUT) key, (VALUEOUT) value);
+	}
+    }
+    
     public void init() {
     }
     
-    public void writeReduceOp(KEYIN key, Context context) {
+    public void writeReduceOp(KEYIN key, Context context) throws IOException, InterruptedException {
     }
-
+    
     public void runShm(Context context) throws IOException, InterruptedException {
 	setup(context);
 	while (context.nextKey()) {
@@ -174,45 +174,42 @@ public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
 	}
 	cleanup(context);
     }
-  
-  public void writeReduceOp(KEYIN key, Context context) throws IOException, InterruptedException {
-  }
-
-  public void writeOutput(Context context) throws IOException, InterruptedException {
-      while (context.nextKey()) {
-	  //	 context.write((KEYOUT)context.getCurrentKey(), (VALUEOUT) context.getStoredVal());
-	  //	  context.write((KEYOUT)context.getCurrentKey(), (VALUEOUT) context.getCurrentValue());
-	  writeReduceOp(context.getCurrentKey(), context);
-      }
-  }
-
-  
-  /**
-   * Called once at the end of the task.
-   */
-  protected void cleanup(Context context
-                         ) throws IOException, InterruptedException {
-    // NOTHING
-  }
-
-  /**
-   * Advanced application writers can use the 
-   * {@link #run(org.apache.hadoop.mapreduce.Reducer.Context)} method to
-   * control how the reduce task works.
-   */
-  public void run(Context context) throws IOException, InterruptedException {
-    setup(context);
-    try {
-      while (context.nextKey()) {
-        reduce(context.getCurrentKey(), context.getValues(), context);
-        // If a back up store is used, reset it
-        Iterator<VALUEIN> iter = context.getValues().iterator();
-        if(iter instanceof ReduceContext.ValueIterator) {
-          ((ReduceContext.ValueIterator<VALUEIN>)iter).resetBackupStore();        
-        }
-      }
-    } finally {
-      cleanup(context);
+    
+    public void writeOutput(Context context) throws IOException, InterruptedException {
+	while (context.nextKey()) {
+	    //	 context.write((KEYOUT)context.getCurrentKey(), (VALUEOUT) context.getStoredVal());
+	    //	  context.write((KEYOUT)context.getCurrentKey(), (VALUEOUT) context.getCurrentValue());
+	    writeReduceOp(context.getCurrentKey(), context);
+	}
     }
-  }
+    
+    
+    /**
+     * Called once at the end of the task.
+     */
+    public void cleanup(Context context
+			) throws IOException, InterruptedException {
+	// NOTHING
+    }
+    
+    /**
+     * Advanced application writers can use the 
+     * {@link #run(org.apache.hadoop.mapreduce.Reducer.Context)} method to
+     * control how the reduce task works.
+     */
+    public void run(Context context) throws IOException, InterruptedException {
+	setup(context);
+	try {
+	    while (context.nextKey()) {
+		reduce(context.getCurrentKey(), context.getValues(), context);
+		// If a back up store is used, reset it
+		Iterator<VALUEIN> iter = context.getValues().iterator();
+		if(iter instanceof ReduceContext.ValueIterator) {
+		    ((ReduceContext.ValueIterator<VALUEIN>)iter).resetBackupStore();        
+		}
+	    }
+	} finally {
+	    cleanup(context);
+	}
+    }
 }

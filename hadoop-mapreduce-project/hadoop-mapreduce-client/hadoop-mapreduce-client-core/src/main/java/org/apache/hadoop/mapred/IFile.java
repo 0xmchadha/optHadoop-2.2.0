@@ -90,8 +90,8 @@ public class IFile {
 	    if (hash_size == 0)
 		shm = new SharedHashMap(shmFile.toString(), true);
 	    else 
-		shm = new SharedhHashMap(shmFile.toString(), hash_size);
-
+		shm = new SharedHashMap(shmFile.toString(), hash_size);
+	    
 	    this.keySerializer = serializationFactory.getSerializer(keyClass);
 	    this.keySerializer.open(kbuf);
 	    this.valueSerializer = serializationFactory.getSerializer(valueClass);
@@ -152,6 +152,10 @@ public class IFile {
 	    ++numRecordsWritten;
 	}
 	
+	public void rename() throws IOException {
+	    shm.rename();
+	}
+
 	public long getRawLength() {
 	    return shm.getRawLength();
 	}

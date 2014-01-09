@@ -975,10 +975,10 @@ public class MapTask extends Task {
 	long sizeSpillFile = 0;
 	IndexRecord rec = new IndexRecord();
 	SpillRecord sr = new SpillRecord(partitions);
-	Path indexFileName;
+	Path indexFileName, spillFile;
 	IFile.shmWriter<K, V> writer, newWriter;
 	
-	if (combiner != null) {
+	if (combinerRunner != null) {
 	    for (int i = 0; i < partitions; i++) {
 		writer = mapWriter.get(i);
 		long hashSize = writer.getHashSize();

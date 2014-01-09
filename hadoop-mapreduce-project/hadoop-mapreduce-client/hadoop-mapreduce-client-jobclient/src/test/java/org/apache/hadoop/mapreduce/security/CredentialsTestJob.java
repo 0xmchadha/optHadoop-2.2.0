@@ -95,7 +95,7 @@ public class CredentialsTestJob extends Configured implements Tool {
   extends Reducer<IntWritable, NullWritable, NullWritable, NullWritable> {
     Credentials ts;
 
-    protected void setup(Context context) 
+    public void setup(Context context) 
     throws IOException, InterruptedException {
       ts = context.getCredentials();
     }

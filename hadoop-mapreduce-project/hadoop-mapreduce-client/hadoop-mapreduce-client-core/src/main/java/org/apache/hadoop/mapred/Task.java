@@ -1612,10 +1612,10 @@ abstract public class Task implements Writable, Configurable {
       @Override
       public void write(K key, V value
                         ) throws IOException, InterruptedException {
-        output.collect(key,value);
+	  output.collect(key,value);
       }
     }
-
+    
     @SuppressWarnings("unchecked")
     @Override
     public void combine(ShmKVIterator iterator, 
@@ -1633,6 +1633,7 @@ abstract public class Task implements Writable, Configurable {
                                                 committer,
                                                 reporter, keyClass,
                                                 valueClass);
+      reducerContext.newIterator();
       reducer.runShm(reducerContext);
     } 
   }

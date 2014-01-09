@@ -185,7 +185,7 @@ public class TestMapCollection {
     private int expected;
 
     @Override
-    protected void setup(Context job) {
+    public void setup(Context job) {
       numrecs = 0;
       expected = job.getConfiguration().getInt("test.spillmap.records", 100);
     }
@@ -198,7 +198,7 @@ public class TestMapCollection {
       }
     }
     @Override
-    protected void cleanup(Context context)
+    public void cleanup(Context context)
         throws IOException, InterruptedException {
       assertEquals("Unexpected record count", expected, numrecs);
     }

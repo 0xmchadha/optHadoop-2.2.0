@@ -66,7 +66,7 @@ public class TestTaskContext extends HadoopTestCase {
   static String myStatus = "my status";
   static class MyMapper extends Mapper<LongWritable, Text, LongWritable, Text> {
     @Override
-    protected void setup(Context context) throws IOException {
+    public void setup(Context context) throws IOException {
       context.setStatus(myStatus);
       assertEquals(myStatus, context.getStatus());
     }
@@ -211,7 +211,7 @@ public class TestTaskContext extends HadoopTestCase {
     private final float REDUCE_PROGRESS_RANGE = 1.0f/3;
     private final float SHUFFLE_PROGRESS_RANGE = 1 - REDUCE_PROGRESS_RANGE;
     
-    protected void setup(final Reducer.Context context) 
+    public void setup(final Reducer.Context context) 
     throws IOException, InterruptedException {
       // Note that the reduce will read some segments before calling setup()
       float reducePhaseProgress =  ((float)++recordCount)/INPUT_LINES;
@@ -233,7 +233,7 @@ public class TestTaskContext extends HadoopTestCase {
                    context.getProgress(), 0.01f);
     }
     
-    protected void cleanup(Reducer.Context context) 
+    public void cleanup(Reducer.Context context) 
     throws IOException, InterruptedException {
       // check if the reduce task has progress of 1 in the end
       assertEquals("Invalid progress in reduce cleanup", 

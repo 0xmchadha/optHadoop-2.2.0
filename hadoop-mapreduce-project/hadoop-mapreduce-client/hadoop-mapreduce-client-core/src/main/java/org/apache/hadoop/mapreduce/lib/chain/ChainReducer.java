@@ -177,9 +177,9 @@ public class ChainReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT> extends
 
   private Chain chain;
 
-  protected void setup(Context context) {
-    chain = new Chain(false);
-    chain.setup(context.getConfiguration());
+  public void setup(Context context) {
+      chain = new Chain(false);
+      chain.setup(context.getConfiguration());
   }
 
   public void run(Context context) throws IOException, InterruptedException {

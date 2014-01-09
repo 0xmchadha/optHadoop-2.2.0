@@ -104,7 +104,7 @@ public class TestMapperReducerCleanup {
       throw new IOException("TestMapperReducerCleanup");
     }
 
-    protected void cleanup(Context context) 
+    public void cleanup(Context context) 
         throws IOException, InterruptedException {
       reduceCleanup = true;
       super.cleanup(context);
@@ -115,7 +115,7 @@ public class TestMapperReducerCleanup {
   private static class TrackingIntSumReducer extends IntSumReducer {
 
     @SuppressWarnings("unchecked")
-    protected void cleanup(Context context) 
+    public void cleanup(Context context) 
         throws IOException, InterruptedException {
       reduceCleanup = true;
       super.cleanup(context);

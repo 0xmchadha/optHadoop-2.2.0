@@ -431,9 +431,11 @@ public class ReduceTask extends Task {
 	//	public org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
 	public ArrayList<org.apache.hadoop.mapreduce.Reducer> reducerList;
 	//	public org.apache.hadoop.mapreduce.RecordWriter<OUTKEY,OUTVALUE> trackedRW;
+	org.apache.hadoop.mapreduce.TaskAttemptContext taskContext;
+	JobConf job;
 	public org.apache.hadoop.mapreduce.RecordWriter trackedRW;
 	private SharedHashMap shmFinal; 
-	private int index = 0;
+	private int arrListIndex = 0;
 	private DataInputBuffer indexInpBuffer = new DataInputBuffer();
 	private byte[] result = new byte[4];
 
@@ -442,8 +444,9 @@ public class ReduceTask extends Task {
 			       final TaskUmbilicalProtocol umbilical,
 			       final TaskReporter reporter,
 			       Class<INKEY> keyClass, 
-			       Class<INVALUE> valueClass) throws IOException,InterruptedException, ClassNotFoundException {
+			       Class<INVALUE> valueClass) throws IOException,InterruptedException {
 	    // wrap value iterator to report progress.
+	    this.job = job;
 	    progress = new Progress();
 	    progress.set((float)0.4);
 	    ShmKVIterator rIter = new ShmKVIterator() {
@@ -480,10 +483,10 @@ public class ReduceTask extends Task {
 	    indexInpBuffer.reset(result, 0, 4); 
 	    shmFinal = new SharedHashMap("shmFinal_" + getTaskID(), true);
 	    // make a task context so we can get the classes
-	    org.apache.hadoop.mapreduce.TaskAttemptContext taskContext =
+	    taskContext = 
 		new org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl(job, getTaskID(), reporter);
 	    
-	    reducerList = new ArrayList<(org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>)>();
+	    reducerList = new ArrayList<org.apache.hadoop.mapreduce.Reducer>();
 
 	    trackedRW = new NewTrackingRecordWriter<OUTKEY, OUTVALUE>(ReduceTask.this, taskContext);
 	      
@@ -497,46 +500,51 @@ public class ReduceTask extends Task {
 	}
       
 	private void modifyInputBuffer(int i) {
-	    result[0] = (byte) (i >> 24);
-	    result[1] = (byte) (i >> 16);
-	    result[2] = (byte) (i >> 8);
-	    result[3] = (byte) (i /*>> 0*/);
+	    result[0] = (byte) (i);
+	    result[1] = (byte) (i >> 8);
+	    result[2] = (byte) (i >> 16);
+	    result[3] = (byte) (i >> 24); 
 	}
 	
 	private int getIndex(DataInputBuffer input) {
+	    int index;
 	    if (input == null)
 		return -1;
 	    byte[] result = input.getData();
-	    int index;
-	    index = (result[0] << 24 | result[1] << 16 | result[2] << 8 | result[3]);
+
+	    index = (result[3]<<24)&0xff000000|(result[2]<<16)&0xff0000|(result[1]<<8)&0xff00|(result[0]<<0)&0xff;
+	    //	    index = (result[3] << 24 | result[2] << 16 | result[1] << 8 | result[0]);
 
 	    return index;
 	}
 	
-	public void runShm(Context context) throws IOException, InterruptedException {
+	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
+	    void runShm(org.apache.hadoop.mapreduce.Reducer.Context  context) throws IOException, InterruptedException, ClassNotFoundException {
 	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
-	    setup(context);
+	    DataInputBuffer keyBuf;
+	    int index;
+	    //	    setup(context);
 	    while (context.nextKey()) {
 		keyBuf = context.getKeyBuf();
 		index = getIndex(shmFinal.get(keyBuf));
 		if (index == -1) {
 		    reducer = (org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>) ReflectionUtils.newInstance(taskContext.getReducerClass(), job);
 		    reducerList.add(reducer);
-		    modifyInputBuffer(index++)
+		    modifyInputBuffer(arrListIndex++);
 		    shmFinal.put(keyBuf, indexInpBuffer);
 		} else
 		    reducer = reducerList.get(index);
 		
-		reducer.reduceShm(context.getCurrentKey(), context.getValues(), context);
+		reducer.reduceShm((INKEY)context.getCurrentKey(), context.getValues(), context);
 	    }
-	    cleanup(context);
+	    //	    cleanup(context);
 	}
 
-	public void startProcessing(SharedHashMap shm) throws IOException, InterruptedException {
+	public void startProcessing(SharedHashMap shm) throws IOException, InterruptedException, ClassNotFoundException{
 	    rawIter = shm.getIterator();
 	    reducerContext.newIterator();
 
-	    reducer.runShm(reducerContext);
+	    runShm(reducerContext);
 	
 	    // delete the file containing shm
 	    shm.destroyLookupHash();
@@ -547,8 +555,10 @@ public class ReduceTask extends Task {
 	    System.gc();
 	}
 	    
-	public void writeOutput() throws IOException, InterruptedException {
+	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
+	    void writeOutput() throws IOException, InterruptedException {
 	    ShmKVIterator iter;
+	    int index;
 	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
 
 	    iter = shmFinal.getFinalIterator();
@@ -557,8 +567,7 @@ public class ReduceTask extends Task {
 	    do {
 		index = getIndex(iter.getValue());
 		reducer = reducerList.get(index);
-		INKEY key = reducerContext.deserializedKey(iter.getKey());
-		reducer.writeReduceOp(key, reducerContext);
+		reducer.writeReduceOp((INKEY)reducerContext.deserializedKey(iter.getKey()), reducerContext);
 	    } while (iter.next());
 
 	    //	    reducer.writeOutput(reducerContext);

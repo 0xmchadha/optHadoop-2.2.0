@@ -82,7 +82,7 @@ public class TestChild extends HadoopTestCase {
   extends Reducer<LongWritable, Text, LongWritable, Text> {
 
     @Override
-    protected void setup(Context context)
+    public void setup(Context context)
         throws IOException, InterruptedException {
       Configuration conf = context.getConfiguration();
       boolean oldConfigs = conf.getBoolean(OLD_CONFIGS, false);

@@ -155,7 +155,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       return buffer;
   }
   
-  public KEYIN deserializedKey(DataInputBuffer key) {
+  public KEYIN deserializedKey(DataInputBuffer key) throws IOException, InterruptedException {
       buffer.reset(key.getData(), 0, key.getLength());
       return keyDeserializer.deserialize(null);
   }

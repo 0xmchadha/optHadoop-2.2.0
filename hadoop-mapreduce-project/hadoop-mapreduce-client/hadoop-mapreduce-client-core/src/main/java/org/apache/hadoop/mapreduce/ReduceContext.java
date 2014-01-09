@@ -24,6 +24,8 @@ import java.util.Iterator;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
+import org.apache.hadoop.io.DataInputBuffer;
+
 /**
  * The context passed to the {@link Reducer}.
  * @param <KEYIN> the class of the input keys
@@ -40,9 +42,11 @@ public interface ReduceContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   public boolean nextKey() throws IOException,InterruptedException;
   
   public void newIterator();
-  public VALUEIN getStoredVal() throws IOException, InterruptedException;
-  public void store(VALUEIN val) throws IOException, InterruptedException;
-
+  //  public VALUEIN getStoredVal() throws IOException, InterruptedException;
+  //  public void store(VALUEIN val) throws IOException, InterruptedException;
+  
+  public DataInputBuffer getKeyBuf();
+  public KEYIN deserializedKey(DataInputBuffer key) throws IOException, InterruptedException;
   /**
    * Iterate through the values for the current key, reusing the same value 
    * object, which is stored in the context.

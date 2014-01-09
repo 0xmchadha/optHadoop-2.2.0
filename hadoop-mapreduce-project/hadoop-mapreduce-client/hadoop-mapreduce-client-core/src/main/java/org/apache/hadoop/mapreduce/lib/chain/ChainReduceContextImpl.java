@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configuration.IntegerRanges;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.RawComparator;
+import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.JobID;
@@ -73,6 +74,16 @@ class ChainReduceContextImpl<KEYIN, VALUEIN, KEYOUT, VALUEOUT> implements
   }
   
   @Override
+      public DataInputBuffer getKeyBuf() {
+      return base.getKeyBuf();
+  }
+  
+  @Override
+      public KEYIN deserializedKey(DataInputBuffer key) throws IOException, InterruptedException {
+      return base.deserializedKey(key);
+  }
+  
+  /*  @Override
   public VALUEIN getStoredVal() throws IOException, InterruptedException {
       return base.getStoredVal();
   }
@@ -81,7 +92,7 @@ class ChainReduceContextImpl<KEYIN, VALUEIN, KEYOUT, VALUEOUT> implements
   public void store(VALUEIN val) throws IOException, InterruptedException {
       base.store(val);
   }
-  
+  */
   @Override
   public Counter getCounter(Enum<?> counterName) {
     return base.getCounter(counterName);

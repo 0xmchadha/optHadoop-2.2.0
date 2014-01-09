@@ -130,7 +130,7 @@ public class BaileyBorweinPlouffe extends Configured implements Tool {
 
     /** Write output to files. */
     @Override
-    protected void cleanup(Context context
+    public void cleanup(Context context
         ) throws IOException, InterruptedException {
       final Configuration conf = context.getConfiguration();
       final Path dir = new Path(conf.get(WORKING_DIR_PROPERTY));

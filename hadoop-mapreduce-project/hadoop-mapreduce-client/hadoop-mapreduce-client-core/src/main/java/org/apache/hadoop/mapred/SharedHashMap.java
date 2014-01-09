@@ -215,10 +215,12 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    slotInfo slot;
 	}
 
-	public createHash(String fileName) throws IOException {
+	public createHash(String fileName, long hash_size) throws IOException {
 	    groupName = fileName;
 	    hmf = new RandomAccessFile(fileName + ".hash", "rw");
 	    dmf = new RandomAccessFile(fileName + ".data", "rw");
+	    if (hash_size != -1)
+		hashSize = (int) hash_size;
 	    hmf.setLength(hashSize);
 	    dmf.setLength(dataSize);
 	    hma = hmf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, hmf.length());
@@ -231,12 +233,8 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    setAvailableAddress(dma, STARTING_ADDRESS);
 	}
 	
-	public createHash(String fileName, int hash_size) throws IOException {
-	    hashSize = hash_size;
-	    createHash(fileName);
-	}
 
-	public rename() {
+	public void rename() throws IOException{
 	    hmf.close();
 	    dmf.close();
 	    File hashFile = new File(groupName + ".hash");
@@ -864,7 +862,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
     public SharedHashMap(String shmFile, boolean isCreating) {
 	try {
 	    if (isCreating == true) {
-		createCuckoo = new createHash(shmFile);
+		createCuckoo = new createHash(shmFile, -1);
 	    } else {
 		/*		Random randomGenerator = new Random();
 		int m = 0;
@@ -886,7 +884,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	}
     }
     
-    public SharedHashMap(String shmFile, long hash_size) {
+    public SharedHashMap(String shmFile, long hash_size) throws IOException {
 	createCuckoo = new createHash(shmFile, hash_size);
     }
 
@@ -898,7 +896,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	return createCuckoo.get(key);
     }
     
-    public void rename() {
+    public void rename() throws IOException {
 	createCuckoo.rename();
     }
 

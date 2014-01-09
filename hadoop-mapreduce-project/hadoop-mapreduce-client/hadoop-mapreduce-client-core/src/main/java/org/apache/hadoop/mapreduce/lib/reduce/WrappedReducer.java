@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configuration.IntegerRanges;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.RawComparator;
+import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.JobID;
@@ -59,7 +60,7 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
   }
   
   @InterfaceStability.Evolving
-  public class Context 
+      public class Context 
       extends Reducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>.Context {
 
     protected ReduceContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT> reduceContext;
@@ -75,8 +76,17 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
     }
 
     @Override
-    public VALUEIN getCurrentValue() throws IOException, InterruptedException {
-      return reduceContext.getCurrentValue();
+	public KEYIN deserializedKey(DataInputBuffer key) throws IOException, InterruptedException {
+	return reduceContext.deserializedKey(key);
+    }
+
+    @Override
+	public DataInputBuffer getKeyBuf() {
+	return reduceContext.getKeyBuf();
+    }
+    @Override
+	public VALUEIN getCurrentValue() throws IOException, InterruptedException {
+	return reduceContext.getCurrentValue();
     }
 
     @Override
@@ -302,7 +312,7 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
 	reduceContext.newIterator();
     }
     
-    @Override
+    /*    @Override
     public VALUEIN getStoredVal() throws IOException, InterruptedException {
 	return reduceContext.getStoredVal();
     }
@@ -311,7 +321,7 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
     public void store(VALUEIN val) throws IOException, InterruptedException {
 	reduceContext.store(val);
     }
-
+    */
     @Override
     public boolean getProfileEnabled() {
       return reduceContext.getProfileEnabled();

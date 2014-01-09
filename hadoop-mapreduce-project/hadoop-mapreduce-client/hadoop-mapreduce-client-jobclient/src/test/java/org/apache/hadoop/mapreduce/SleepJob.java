@@ -164,7 +164,7 @@ public class SleepJob extends Configured implements Tool {
     private int reduceSleepCount = 1;
     private int count = 0;
 
-    protected void setup(Context context) 
+    public void setup(Context context) 
       throws IOException, InterruptedException {
       Configuration conf = context.getConfiguration();
       this.reduceSleepCount =
