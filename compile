@@ -1,4 +1,4 @@
-mvn clean install -DskipTests;
+mvn install -DskipTests;
 cd hadoop-mapreduce-project/ && mvn package -Pdist -DskipTests=true && cd ../hadoop-common-project/ && mvn package -Pdist -DskipTests=true && cd ../hadoop-yarn-project/ && mvn package -Pdist -DskipTests=true;
 
 cp /home/ubuntu/hadoopMod/hadoop-2.2.0-src/hadoop-mapreduce-project/target/hadoop-mapreduce-2.2.0/share/hadoop/mapreduce/*.jar ~/hadoop-2.2.0/share/hadoop/mapreduce/

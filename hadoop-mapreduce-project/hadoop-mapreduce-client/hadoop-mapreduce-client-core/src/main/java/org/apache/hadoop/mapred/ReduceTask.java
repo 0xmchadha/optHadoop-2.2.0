@@ -291,7 +291,7 @@ public class ReduceTask extends Task {
     
     boolean useNewApi = job.getUseNewReducer();
     initialize(job, getJobID(), reporter, useNewApi);
-
+    
     // check if it is a cleanupJobTask
     if (jobCleanup) {
       runJobCleanupTask(umbilical, reporter);
@@ -360,7 +360,8 @@ public class ReduceTask extends Task {
 
     /* write mr output */
     iterate.writeOutput();
-    
+    iterate.cleanup();
+
     if (shuffleConsumerPlugin != null) {
       shuffleConsumerPlugin.close();
     }
@@ -438,13 +439,14 @@ public class ReduceTask extends Task {
 	private int arrListIndex = 0;
 	private DataInputBuffer indexInpBuffer = new DataInputBuffer();
 	private byte[] result = new byte[4];
+	private boolean userWriteOutput = false;
 
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
 	    iterativeComputing(JobConf job, 
 			       final TaskUmbilicalProtocol umbilical,
 			       final TaskReporter reporter,
 			       Class<INKEY> keyClass, 
-			       Class<INVALUE> valueClass) throws IOException,InterruptedException {
+			       Class<INVALUE> valueClass) throws IOException,InterruptedException, ClassNotFoundException {
 	    // wrap value iterator to report progress.
 	    this.job = job;
 	    progress = new Progress();
@@ -485,6 +487,13 @@ public class ReduceTask extends Task {
 	    // make a task context so we can get the classes
 	    taskContext = 
 		new org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl(job, getTaskID(), reporter);
+	    
+	    try {
+		if (taskContext.getReducerClass() == taskContext.getReducerClass().getMethod("writeReduceOp").getDeclaringClass())
+		    userWriteOutput = true;
+	    } catch(NoSuchMethodException e) {
+		LOG.info("not found");
+	    }
 	    
 	    reducerList = new ArrayList<org.apache.hadoop.mapreduce.Reducer>();
 
@@ -554,25 +563,32 @@ public class ReduceTask extends Task {
 	    // reclaim the space 
 	    System.gc();
 	}
-	    
+	
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
 	    void writeOutput() throws IOException, InterruptedException {
 	    ShmKVIterator iter;
 	    int index;
 	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
-
-	    iter = shmFinal.getFinalIterator();
-	    //reducerContext.newIterator();
-	    iter.start();
-	    do {
-		index = getIndex(iter.getValue());
-		reducer = reducerList.get(index);
-		reducer.writeReduceOp((INKEY)reducerContext.deserializedKey(iter.getKey()), reducerContext);
-	    } while (iter.next());
-
-	    //	    reducer.writeOutput(reducerContext);
-	    
+	    if (userWriteOutput == true) {
+		iter = shmFinal.getFinalIterator();
+		//reducerContext.newIterator();
+		iter.start();
+		do {
+		    index = getIndex(iter.getValue());
+		    reducer = reducerList.get(index);
+		    reducer.writeReduceOp((INKEY)reducerContext.deserializedKey(iter.getKey()), reducerContext);
+		} while (iter.next());
+		
+		//	    reducer.writeOutput(reducerContext);
+	    }	
 	    trackedRW.close(reducerContext);
+	}
+
+	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
+	    void cleanup() throws IOException, InterruptedException{
+	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;  
+	    reducer = reducerList.get(0);
+	    reducer.cleanup(reducerContext);
 	}
     }
     
