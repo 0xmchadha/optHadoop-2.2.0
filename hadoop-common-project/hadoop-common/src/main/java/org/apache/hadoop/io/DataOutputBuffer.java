@@ -47,27 +47,36 @@ import org.apache.hadoop.classification.InterfaceStability;
 public class DataOutputBuffer extends DataOutputStream {
 
   private static class Buffer extends ByteArrayOutputStream {
-    public byte[] getData() { return buf; }
-    public int getLength() { return count; }
-
-    public Buffer() {
-      super();
-    }
-    
-    public Buffer(int size) {
-      super(size);
-    }
-    
-    public void write(DataInput in, int len) throws IOException {
-      int newcount = count + len;
-      if (newcount > buf.length) {
-        byte newbuf[] = new byte[Math.max(buf.length << 1, newcount)];
-        System.arraycopy(buf, 0, newbuf, 0, count);
-        buf = newbuf;
+      public int written;
+      
+      public byte[] getData() { return buf; }
+      public int getLength() { return count; }
+      public int numWrittenBytes() { return written;}
+      
+      public Buffer() {
+	  super();
       }
-      in.readFully(buf, count, len);
-      count = newcount;
-    }
+      
+      public Buffer(int size) {
+	  super(size);
+      }
+      
+      public void change_buf(byte[] buf, int len) {
+	  this.buf = buf;
+	  count = len;
+      }
+      
+      public void write(DataInput in, int len) throws IOException {
+	  int newcount = count + len;
+	  if (newcount > buf.length) {
+	      byte newbuf[] = new byte[Math.max(buf.length << 1, newcount)];
+	      System.arraycopy(buf, 0, newbuf, 0, count);
+	      buf = newbuf;
+	  }
+	  in.readFully(buf, count, len);
+	  count = newcount;
+	  written = len;
+      }
   }
 
   private Buffer buffer;
@@ -80,12 +89,20 @@ public class DataOutputBuffer extends DataOutputStream {
   public DataOutputBuffer(int size) {
     this(new Buffer(size));
   }
+    
   
   private DataOutputBuffer(Buffer buffer) {
     super(buffer);
     this.buffer = buffer;
   }
 
+   public void change_buf(byte[] buf, int len) {
+       buffer.change_buf(buf, len);
+    }
+ 
+    public int numWrittenBytes() {
+	return buffer.numWrittenBytes();
+    }
   /** Returns the current contents of the buffer.
    *  Data is only valid to {@link #getLength()}.
    */

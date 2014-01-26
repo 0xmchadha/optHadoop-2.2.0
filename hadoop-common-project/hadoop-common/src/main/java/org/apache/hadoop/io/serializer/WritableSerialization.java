@@ -30,6 +30,9 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.ReflectionUtils;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 /**
  * A {@link Serialization} for {@link Writable}s that delegates to
  * {@link Writable#write(java.io.DataOutput)} and
@@ -44,7 +47,7 @@ public class WritableSerialization extends Configured
 
     private Class<?> writableClass;
     private DataInputStream dataIn;
-    
+
     public WritableDeserializer(Configuration conf, Class<?> c) {
       setConf(conf);
       this.writableClass = c;
@@ -87,15 +90,15 @@ public class WritableSerialization extends Configured
     @Override
     public void open(OutputStream out) {
       if (out instanceof DataOutputStream) {
-        dataOut = (DataOutputStream) out;
+	  dataOut = (DataOutputStream) out;
       } else {
-        dataOut = new DataOutputStream(out);
+	  dataOut = new DataOutputStream(out);
       }
     }
 
     @Override
     public void serialize(Writable w) throws IOException {
-      w.write(dataOut);
+	w.write(dataOut);
     }
 
     @Override

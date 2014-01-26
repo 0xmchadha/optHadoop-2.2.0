@@ -19,7 +19,9 @@ import org.apache.commons.logging.LogFactory;
 
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.mapred.ShmKVIterator;
+import org.apache.hadoop.mapred.CityHash;
 import org.apache.hadoop.util.Progress;
+import org.apache.hadoop.io.WritableUtils;
 /**
  * HashMap implementation that passes calls onto a memory-mapped file system.
  * For sharing a single HashMap amongst JVM instances on a single machine
@@ -32,9 +34,9 @@ import org.apache.hadoop.util.Progress;
 
 /*
   Key Store
-                     --------------- ------------ -------------
-  9 bytes per key    1byte hashCode |  key ptr   |   val Ptr
-                     --------------- ------------ -------------
+                     --------------- -------
+  5 bytes per key    1byte hashCode |  ptr
+                     --------------- -------
   4 key entries per slot
 
   Val Store
@@ -71,7 +73,6 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
     private lookupHash lookupCuckoo;
     /* Total bytes for Progress */
     private int TotalBytes = 0;
-    private boolean replaceValue = false;
     private static final Log LOG = LogFactory.getLog(SharedHashMap.class.getName());
     
     private byte getTag(byte[] key, int keyLen) {
@@ -117,46 +118,75 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
     private class keyInfo {
 	public int slot1;
 	public int slot2;
-	public int activeSlot = 0;
 	public byte tag;
 	public byte[] Tag;
 	public byte[] key;
+	public MappedByteBuffer mbf;
 	public int len;
-	public int hashSize;
+	public int keyOffset;
+	public long hashMask;
+	public boolean reboot = false;
+	public boolean check = false;
 
 	public keyInfo(int hashSize) {
 	    Tag = new byte[1];
-	    this.hashSize = hashSize;
+	    hashMask = (hashSize / slotSize) - 1;
 	}
 
 	public void newHashSize(int hashSize) {
-	    this.hashSize = hashSize;
+	    hashMask = (hashSize / slotSize) - 1;
 	}
 	
-	private void slot1(long hash) {
-	    slot1 = (int) (Math.abs(hash) % (hashSize/slotSize));
-	}
-	
-	private void slot2(long hash, byte[] Tag) {
-	    slot2 = (int) (Math.abs(hash ^ hashfunc(Tag, 1)) % (hashSize/slotSize));    
-	}
-	
-	public void newKey(byte[] key, int keyLen) {
-	    this.key = key;
+	public void newKey(MappedByteBuffer mbf, int keyOff, int keyLen) {
+	    //   this.key = key;
 	    len = keyLen;
-	    tag = getTag(key, keyLen);
+	    this.mbf = mbf;
+	    check = true;
+	    keyOffset = keyOff;
+	    long hash = CityHash.MappedcityHash64(mbf, keyOff, keyLen);
+	    slot1 = (int) (hash & hashMask);
+	    tag = (byte)(hash >>> 56);
 	    Tag[0] = tag;
-	    long hash = hashfunc(key, keyLen);
-	    slot1(hash);
-	    slot2(hash, Tag);
+	    slot2 = (int)((slot1 ^ (tag * 0x5bd1e995)) & hashMask);
 	}
 
-	public void repKey(MappedByteBuffer mbf, byte tag, int addr) {
-	    long hash = hashfunc(mbf, addr);
-	    this.tag = tag;
+	public void newKey(byte[] dmba, int keyOff, int keyLen) {
+	    //   this.key = key;
+	    len = keyLen;
+	    this.key = dmba;
+	    check = false;
+	    keyOffset = keyOff;
+	    long hash = CityHash.cityHash64(dmba, keyOff, keyLen);
+	    slot1 = (int) (hash & hashMask);
+	    tag = (byte)(hash >>> 56);
 	    Tag[0] = tag;
-	    slot1(hash);
-	    slot2(hash, Tag);
+	    slot2 = (int)((slot1 ^ (tag * 0x5bd1e995)) & hashMask);
+	}
+
+	public int repKey(MappedByteBuffer mbf, byte tag, int valOff, int slot) {
+
+	    if (reboot == false) {
+		slot1 = slot;
+		this.tag = tag;
+	    }
+	    else {
+		int valLen = (int)WritableUtils.readIntOpt(mbf.get(valOff));
+		int keyOff = valOff + 1 + valLen + 4;
+		int keyLen = (int)WritableUtils.readIntOpt(mbf.get(keyOff));
+		long hash = CityHash.MappedcityHash64(mbf, keyOff+1, keyLen);
+		slot1 = (int) (hash & hashMask);
+		tag = (byte)(hash >>> 56);
+	    }
+	    
+	    Tag[0] = tag;
+	    slot2 = (int)((slot1 ^ (tag * 0x5bd1e995)) & hashMask);
+	    
+	    if (reboot == true) {
+		//		System.out.println(slot1 + " " + slot2);
+		return slot1;
+	    }
+	    
+	    return slot2;
 	}
     }
     
@@ -164,7 +194,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
     private class createHash {
 	private MappedByteBuffer hma;
 	private RandomAccessFile hmf;
-	private MappedByteBuffer dma;
+	public MappedByteBuffer dma;
 	private RandomAccessFile dmf;
 	/*
  	 * ---------------------
@@ -177,7 +207,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	 * |    |    |    |    |
 	 * ---------------------
 	 */
-	private static final int MAX_CUCKOO = 400;
+	private static final int MAX_CUCKOO = 500;
 	private int hashSize =  STARTING_ADDRESS + 65536 * slotSize; // grows in multiples of 2
 	private int dataSize = STARTING_ADDRESS + 256*1024*1024; // 256MB is an upperbound
 	private keyInfo nKey; // new key
@@ -188,7 +218,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	private static final int MAX_LEN = 64;
 	private byte[] byteArr = new byte[MAX_LEN];
 	private DataInputBuffer buf = new DataInputBuffer();
-	//	private boolean replaceValue = false;
+
 	Random generator = new Random();
 	private int numKeys = 0;
 	private repInfo repinfo = new repInfo();
@@ -197,15 +227,11 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    return ((hashSize - STARTING_ADDRESS) * grow + STARTING_ADDRESS);
 	}
 	
-	private void setReplaceValT() {
-	    replaceValue = true;
-	}
-	
 	private void setAvailableAddress(MappedByteBuffer mbf, int val) {
 	    mbf.putLong(0, val);
 	}
 	
-	private int getAvailableAddress(MappedByteBuffer mbf) {
+	public int getAvailableAddress(MappedByteBuffer mbf) {
 	    return (int) mbf.getLong(0);
 	}
 	
@@ -233,7 +259,6 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    setAvailableAddress(dma, STARTING_ADDRESS);
 	}
 	
-
 	public void rename() throws IOException{
 	    hmf.close();
 	    dmf.close();
@@ -246,15 +271,24 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	}
 	
 	private boolean keyMatches(int dataAddress, keyInfo key) {
-	    int len = dma.getInt(dataAddress);
-	    int keyOffset = dataAddress + 4;
+	    int valLen = (int)WritableUtils.readIntOpt(dma.get(dataAddress));
+	    int keyLen = (int)WritableUtils.readIntOpt(dma.get(dataAddress + (1 + valLen + 4)));
 	    
-	    if (len != key.len) 
+	    dataAddress += 5 + valLen;
+	    
+	    if (keyLen != key.len) 
 		return false;
 	    
-	    for (int i = 0; i < len; i++) {
-		if (key.key[i] != dma.get(keyOffset + i))
-		    return false;
+	    if (key.check == false) {
+		for (int i = 0; i < keyLen; i++) {
+		    if (key.key[key.keyOffset + i] != dma.get(dataAddress + 1 + i))
+			return false;
+		}
+	    } else {
+		for (int i = 0; i < keyLen; i++) {
+		    if (key.mbf.get(key.keyOffset + i) != dma.get(dataAddress + 1 + i))
+			return false;
+		}
 	    }
 	    
 	    return true;
@@ -276,8 +310,8 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    } 
 	    slot.found = false;
 	    slot.replaced = true;
-	    //	    slot.hashAddress = offset + (Math.abs(generator.nextInt()) % 4) * hashEntryLen;
-	    slot.hashAddress = offset + 2 * hashEntryLen;
+	    slot.hashAddress = offset + (Math.abs(generator.nextInt(4))) * hashEntryLen;
+	    //slot.hashAddress = offset + 2 * hashEntryLen;
 	}
 	
 	private void keyExists(keyInfo key, slotInfo slot) {
@@ -307,21 +341,12 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    slot.replaced = true;
 	}
 	
-	private int addKV(byte[] key, byte[] val, byte tag, int keyLen, int valLen, int hashAddr, int dataAddr) {
+	private int addKV(int keyOff, int keyLen, int valOff, int valLen,
+			  byte tag, int hashAddr) {
 	    hma.put(STARTING_ADDRESS + hashAddr, tag);
-	    hma.putInt(STARTING_ADDRESS + hashAddr + 1, dataAddr);
+	    hma.putInt(STARTING_ADDRESS + hashAddr + 1, valOff - 1);
 
-	    dma.putInt(dataAddr, keyLen);
-	    for (int i = 0; i < keyLen; i++) 
-		dma.put(dataAddr + INTLENGTH + i, key[i]);
-	    
-	    dma.putInt(dataAddr + INTLENGTH + keyLen, valLen);
-	    for (int j = 0; j < valLen; j++) 
-		dma.put(dataAddr + 2 * INTLENGTH + keyLen + j, val[j]);
-
-	    dma.putInt(dataAddr + 2 * INTLENGTH + keyLen + valLen, 0);
-
-	    return dataAddr + 2 * INTLENGTH + keyLen + valLen + ADDRESSLENGTH;
+	    return keyOff + keyLen;
 	}
 	
 	private void addKey(int hashAddr, byte tag, int dataAddr) {
@@ -329,33 +354,15 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    hma.putInt(STARTING_ADDRESS + hashAddr + 1, dataAddr);
 	}
 
-	private int addNextValue(byte[] Nvalbuf, int NvalLen, int dataAddr, int emptySlotAddr) {
-	    int keyLen = dma.getInt(dataAddr);
-	    int valLen = dma.getInt(dataAddr + INTLENGTH + keyLen);
+	private int addNextValue(int NvalOff, int NvalLen, int dataAddr) {
+	    int valLen = (int)WritableUtils.readIntOpt(dma.get(dataAddr));
 	    
-	    int nextPtr = dma.getInt(dataAddr + 2 * INTLENGTH + keyLen + valLen);
-	    dma.putInt(emptySlotAddr, NvalLen);
-	    for (int i = 0; i < NvalLen; i++) {
-		dma.put(emptySlotAddr + INTLENGTH + i, Nvalbuf[i]);
-	    }
+	    int nextPtr = dma.getInt(dataAddr + valLen + 1);
 	    
-	    dma.putInt(emptySlotAddr + INTLENGTH + NvalLen, nextPtr); 
-	    dma.putInt(dataAddr + 2 * INTLENGTH + keyLen + valLen, emptySlotAddr);
-	    return emptySlotAddr + INTLENGTH + NvalLen + ADDRESSLENGTH;
-	}
-	
-	private void replaceVal(byte[] val, int valLen, int dataAddress) {
-	    int keyLen = dma.getInt(dataAddress);
-	    int sValLen = dma.getInt(dataAddress + INTLENGTH + keyLen);
-	    
-	    if (sValLen < valLen) {
-		return;
-	    }
+	    dma.putInt(NvalOff + valLen, nextPtr);
+	    dma.putInt(dataAddr + valLen + 1, NvalOff - 1);
 
-	    dma.putInt(dataAddress + INTLENGTH + keyLen, valLen);
-
-	    for (int i = 0; i < valLen; i++) 
-		dma.put(dataAddress + 2 * INTLENGTH + keyLen + i, val[i]);
+	    return NvalOff + NvalLen + INTLENGTH;
 	}
 	
 	private boolean cuckooBucket(repInfo rep) {
@@ -365,14 +372,11 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		// slot gives the info where it 
 		// has been evicted from
 		
-		rKey.repKey(dma, rep.tag, rep.addr);
-		
+		rep.slot.slot = rKey.repKey(dma, rep.tag, rep.addr, rep.slot.slot);
+		rKey.reboot = false;
+
 		// store the alternate location 
 		// in the slot
-		if (rKey.slot1 == rep.slot.slot)
-		    rep.slot.slot = rKey.slot2;
-		else
-		    rep.slot.slot = rKey.slot1;
 		
 		// see if this new slot is empty
 		findEntry(rep.slot);
@@ -397,7 +401,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    MappedByteBuffer Lhma, Thma; // large and tmp
 	    RandomAccessFile Lhmf, Thmf;
 	    newHashSize = growHash(growFactor);	    
-	    Lhmf = new RandomAccessFile("tmp_hash", "rw");
+	    Lhmf = new RandomAccessFile(groupName + "_tmphash", "rw");
 	    Lhmf.setLength(newHashSize);
 	    Lhma = Lhmf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, Lhmf.length());
 	    
@@ -409,6 +413,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 
 	    rKey.newHashSize(newHashSize - STARTING_ADDRESS);
 	    nKey.newHashSize(newHashSize - STARTING_ADDRESS);
+	    rKey.reboot = true;
 	    
 	    cuckooBucket(rep);
 
@@ -419,6 +424,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		    if (Thma.getInt(addr + 1) != 0) {
 			rep.tag = Thma.get(addr);
 			rep.addr = Thma.getInt(addr + 1);
+			rKey.reboot = true;
 			if (cuckooBucket(rep) == false) {
 			    //			    new File("tmp_hash").delete();
 			    //			    hmf = Thmf;
@@ -432,19 +438,15 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		}
 	    }
 	    
+	    rKey.reboot = false;
 	    hashSize = newHashSize;
 	    File file = new File(groupName + ".hash");
 	    file.delete();
-	    new File("tmp_hash").renameTo(file);
+	    new File(groupName + "_tmphash").renameTo(file);
 	}
 	
-	private void put(DataInputBuffer key, DataInputBuffer value) throws IOException {
-	    byte[] keybuf = key.getData();
-	    byte[] valbuf = value.getData();
-	    int keyLength = key.getLength() - key.getPosition();
-	    int keyPos = key.getPosition();
-	    int valLength = value.getLength() - value.getPosition();
-	    int valPos = value.getPosition();
+	private void put(int valOff, int valLen, int keyOff, int keyLen) throws IOException {
+
 	    boolean found = false;
 	    boolean replaced = true;
 	    boolean checkOther = false;
@@ -454,7 +456,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    int randHashEntry;
 	    
 	    numKeys++;
-	    nKey.newKey(keybuf, keyLength);
+	    nKey.newKey(dma, keyOff, keyLen);
 	    hashSlot1.slot = nKey.slot1;
 	    hashSlot2.slot = nKey.slot2;
 
@@ -472,16 +474,13 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    }
 	    
 	    if (found == true) {
-		if (replaceValue == false)
-		    setAvailableAddress(dma, addNextValue(valbuf, valLength, slot.dataAddress, availableAddress));
-		else {
-		    replaceVal(valbuf, valLength, slot.dataAddress);
-		}
+
+		setAvailableAddress(dma, addNextValue(valOff, valLen, slot.dataAddress));
 		return;
 	    }
 	    
-	    //	    random = Math.abs(generator.nextInt()) % 2;
-	    random = 1;
+	    random = Math.abs(generator.nextInt(2));
+	    //	    random = 1;
 
 	    if (hashSlot1.replaced == false) {
 		slot = hashSlot1;
@@ -497,12 +496,12 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    }
 	    
 	    if (replaced == false) {
-		setAvailableAddress(dma, addKV(keybuf, valbuf, nKey.tag, keyLength, valLength, slot.hashAddress, availableAddress));
+		setAvailableAddress(dma, addKV(keyOff, keyLen, valOff, valLen, nKey.tag, slot.hashAddress));
 		return;
 	    }
 	    
-	    //	    randHashEntry = Math.abs(generator.nextInt()) % 4;
-	    randHashEntry = 2;
+	    randHashEntry = Math.abs(generator.nextInt(4));
+	    //   randHashEntry = 2;
 
 	    if (random == 0)
 		slot = hashSlot1;
@@ -512,7 +511,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    int addr = slot.slot * slotSize + randHashEntry * hashEntryLen;
 	    byte rtag = hma.get(STARTING_ADDRESS + addr);
 	    int rDaddr = hma.getInt(STARTING_ADDRESS + addr + 1);
-	    setAvailableAddress(dma, addKV(keybuf, valbuf, nKey.tag, keyLength, valLength, addr, availableAddress));
+	    setAvailableAddress(dma, addKV(keyOff, keyLen, valOff, valLen, nKey.tag, addr));
 	    int max_allowed = 0;
 
 	    repinfo.tag = rtag;
@@ -527,12 +526,10 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	}
 	
 	private DataInputBuffer retValBuf(int dataLoc) {
-	    int keyLen, valLen;
 	    byte[] valp;
 	    
-	    keyLen = dma.getInt(dataLoc);
-	    valLen = dma.getInt(dataLoc + INTLENGTH + keyLen);
-
+	    int valLen = (int)WritableUtils.readIntOpt(dma.get(dataLoc));
+	  
 	    valp = byteArr;
 	    if (valLen > MAX_LEN) {
 		    byte[] nval = new byte[valLen];
@@ -540,7 +537,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    }
 	    
 	    for (int i = 0; i < valLen; i++) {
-		valp[i] = dma.get(dataLoc + 2 * INTLENGTH + keyLen + i);
+		valp[i] = dma.get(dataLoc + 1 + i);
 	    }
 	    
 	    buf.reset(valp, 0, valLen);
@@ -552,7 +549,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    byte[] keybuf = key.getData();
 	    int keyLength = key.getLength();
 	    
-	    nKey.newKey(keybuf, keyLength);
+	    nKey.newKey(keybuf, 0, keyLength);
 
 	    hashSlot1.slot = nKey.slot1;
 	    keyExists(nKey, hashSlot1);
@@ -586,8 +583,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    
 	    public boolean start() {
 		int dataAdd;
-		int keyLen;
-		
+
 		while(true) {
 		    dataAdd = hma.getInt(hashLoc + 1);
 		    if (dataAdd == 0) {
@@ -597,21 +593,22 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 			
 			continue;
 		    }
-		    keyLen = dma.getInt(dataAdd);
-		    dataLoc = dataAdd + INTLENGTH + keyLen;
 		    
+		    dataLoc = dataAdd;
 		    return true;
 		}
 	    }
 	    
 	    public boolean next() throws IOException {
 		NextKeySame = true;
+
 		if (hashLoc < hashSize) {
 		    int nDataAdd;
 		    int valLen;
 		    int keyLen;
-		    valLen = dma.getInt(dataLoc);
-		    nDataAdd = dma.getInt(dataLoc + INTLENGTH + valLen);
+		    
+		    valLen = (int) WritableUtils.readIntOpt(dma.get(dataLoc));
+		    nDataAdd = dma.getInt(dataLoc + 1 + valLen);
 		    
 		    if (nDataAdd == 0) {
 			NextKeySame = false;
@@ -623,8 +620,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 			    nDataAdd = hma.getInt(hashLoc + 1);
 			    if (nDataAdd == 0)
 				continue;
-			    keyLen = dma.getInt(nDataAdd);
-			    dataLoc = nDataAdd + INTLENGTH + keyLen;
+			    dataLoc = nDataAdd;
 			    break;
 			}
 		    } else 
@@ -635,7 +631,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    }
 
 	    public DataInputBuffer getValue() {
-		int valLen = dma.getInt(dataLoc);
+		int valLen = (int)WritableUtils.readIntOpt(dma.get(dataLoc));
 		byte[] valp;
 		
 		valp = byteArr;
@@ -645,9 +641,8 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		}
 		
 		for (int i = 0; i < valLen; i++) {
-		    valp[i] = dma.get(dataLoc + INTLENGTH + i);
+		    valp[i] = dma.get(dataLoc + 1 + i);
 		}
-		
 		
 		buf.reset(valp, 0, valLen);
 		return buf;
@@ -657,9 +652,14 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		int keyLen;
 		int dataAdd;
 		byte[] keyp;
+		int valLen;
+
 		keyp = byteArr;
 		dataAdd = hma.getInt(hashLoc + 1);
-		keyLen = dma.getInt(dataAdd);
+		
+		valLen = (int)WritableUtils.readIntOpt(dma.get(dataAdd));
+		dataAdd += (1 + valLen + INTLENGTH);
+		keyLen = (int)WritableUtils.readIntOpt(dma.get(dataAdd));
 
 		if (keyLen > MAX_LEN) {
 		    byte[] nKey = new byte[keyLen];
@@ -667,7 +667,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		}
 
 		for (int i = 0; i < keyLen; i++) {
-		    keyp[i] = dma.get(dataAdd + INTLENGTH + i);
+		    keyp[i] = dma.get(dataAdd + 1 + i);
 		}
 
 		buf.reset(keyp, 0, keyLen);
@@ -730,7 +730,6 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    fileName = file;
 	    shf = new RandomAccessFile(file, "r");
 	    shm = shf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, shf.length());
-	    
 	    shm.load(); 
 	    dataOffset = (int) shm.getLong(0);
 	}
@@ -766,8 +765,8 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 			
 			continue;
 		    }
-		    keyLen = shm.getInt(dataOffset + dataAdd);
-		    dataLoc = dataOffset + dataAdd + INTLENGTH + keyLen;
+
+		    dataLoc = dataOffset + dataAdd;
 		    return true;
 		}
 	    }
@@ -779,9 +778,9 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		    int nDataAdd;
 		    int valLen;
 		    int keyLen; 
-		    
-		    valLen = shm.getInt(dataLoc);
-		    nDataAdd = shm.getInt(dataLoc + INTLENGTH + valLen); //next dataAddress
+		   
+		    valLen = (int)WritableUtils.readIntOpt(shm.get(dataLoc));
+		    nDataAdd = shm.getInt(dataLoc + 1 + valLen); //next dataAddress
 		    if (nDataAdd == 0) {
 			NextKeySame = false;
 			while(true) {
@@ -790,8 +789,8 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 				return false;
 			    if ((nDataAdd = shm.getInt(hashLoc + 1)) == 0)
 				continue;
-			    keyLen = shm.getInt(dataOffset + nDataAdd);
-			    dataLoc = dataOffset + nDataAdd + INTLENGTH + keyLen;
+
+			    dataLoc = dataOffset + nDataAdd;
 			    break;
 			}
 		    } else 
@@ -802,7 +801,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    }
 
 	    public DataInputBuffer getValue() {
-		int valLen = shm.getInt(dataLoc);
+		int valLen = (int)WritableUtils.readIntOpt(shm.get(dataLoc));
 		byte[] valp;
 		
 		valp = byteArr;
@@ -813,7 +812,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		}
 		
 		for (int i = 0; i < valLen; i++) {
-		    valp[i] = shm.get(dataLoc + INTLENGTH + i);
+		    valp[i] = shm.get(dataLoc + 1 + i);
 		}
 		
 		buf.reset(valp, 0, valLen);
@@ -821,21 +820,25 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    }
 
 	    public DataInputBuffer getKey() {
-		int keyLen;
+		int valLen;
 		int dataAdd;
 		byte[] keyp;
+		int keyLen;
 
 		keyp = byteArr;
 		dataAdd = shm.getInt(hashLoc + 1);
-		keyLen = shm.getInt(dataOffset + dataAdd);
-		
+
+		valLen = (int)WritableUtils.readIntOpt(shm.get(dataOffset + dataAdd));
+		dataAdd += (dataOffset + 1 + valLen + INTLENGTH);
+		keyLen = (int)WritableUtils.readIntOpt(shm.get(dataAdd));
+
 		if (keyLen > MAX_LEN) {
 		    byte[] nKey = new byte[keyLen];
 		    keyp = nKey;
 		}
-		
+
 		for (int i = 0; i < keyLen; i++) {
-		    keyp[i] = shm.get(dataOffset + dataAdd + INTLENGTH + i);
+		    keyp[i] = shm.get(dataAdd + 1 + i);
 		}
 
 		buf.reset(keyp, 0, keyLen);
@@ -888,22 +891,30 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	createCuckoo = new createHash(shmFile, hash_size);
     }
 
-    public void put(DataInputBuffer key, DataInputBuffer value) throws IOException {
-	createCuckoo.put(key, value);
-    }
+    //    public void put(DataInputBuffer key, DataInputBuffer value) throws IOException {
+	//	createCuckoo.put(key, value);
+    //    }
 
+    public void put(int valOff, int valLen, int keyOff, int keyLen) throws IOException {
+	createCuckoo.put(valOff, valLen, keyOff, keyLen);
+    }
+    
     public DataInputBuffer get(DataInputBuffer key) {
 	return createCuckoo.get(key);
     }
     
+    public MappedByteBuffer getMappedByteBuf() {
+	return createCuckoo.dma;
+    }
+
+    public int getOffset() {
+	return createCuckoo.getAvailableAddress(createCuckoo.dma);
+    }
+
     public void rename() throws IOException {
 	createCuckoo.rename();
     }
 
-    public void setReplaceValT() {
-	createCuckoo.setReplaceValT();
-    }
-    
     public ShmKVIterator getIterator() {
 	return lookupCuckoo.getIterator();
     }
@@ -929,3 +940,4 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
     }
     
 }
+

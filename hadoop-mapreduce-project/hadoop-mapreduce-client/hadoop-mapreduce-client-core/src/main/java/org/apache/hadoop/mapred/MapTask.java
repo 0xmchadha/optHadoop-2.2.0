@@ -55,6 +55,7 @@ import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.io.serializer.Serializer;
 import org.apache.hadoop.mapred.IFile.Writer;
 import org.apache.hadoop.mapred.IFile.shmWriter;
+import org.apache.hadoop.mapred.IFile.shmWriter.inWriter;
 import org.apache.hadoop.mapred.Merger.Segment;
 import org.apache.hadoop.mapred.SortedRanges.SkipRangeIterator;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -863,8 +864,8 @@ public class MapTask extends Task {
 
     // Compression for map-outputs
     private CompressionCodec codec;
-    private ArrayList<IFile.shmWriter<K, V>> mapWriter;
-    
+    private ArrayList<IFile.shmWriter<K, V>.inWriter> mapWriter;
+        
     private FileSystem rfs;
     
     // Counters
@@ -876,6 +877,7 @@ public class MapTask extends Task {
     private MapOutputFile mapOutputFile;
     private Progress sortPhase;
     private Counters.Counter spilledRecordsCounter;
+    private IFile.shmWriter<K, V> globalWriter;
 
     public MapOutputBuffer() {
     }
@@ -896,17 +898,10 @@ public class MapTask extends Task {
       valClass = (Class<V>)job.getMapOutputValueClass();
       serializationFactory = new SerializationFactory(job);
       
-      mapWriter = new ArrayList<IFile.shmWriter<K, V>>();
+      mapWriter = new ArrayList<IFile.shmWriter<K, V>.inWriter>();
       
       FSDataOutputStream out;
       Path spillFile;
-      IFile.shmWriter<K, V> writer = null;
-      
-      for (int i = 0; i < partitions; i++) {
-	  spillFile = mapOutputFile.getSpillFileForWrite(i);
-	  writer = new shmWriter<K, V>(job, spillFile, keyClass, valClass, codec, null, 0);
-	  mapWriter.add(writer);
-      }
       
       // output counters
       mapOutputByteCounter = reporter.getCounter(TaskCounter.MAP_OUTPUT_BYTES);
@@ -923,7 +918,16 @@ public class MapTask extends Task {
       } else {
         codec = null;
       }
-
+      
+      globalWriter = new shmWriter(job, keyClass, valClass, codec, null);
+      inWriter inwriter = null;
+      
+      for (int i = 0; i < partitions; i++) {
+	  spillFile = mapOutputFile.getSpillFileForWrite(i);
+	  inwriter = globalWriter.new inWriter(spillFile, 0);
+	  mapWriter.add(inwriter);
+      }
+      
       // combiner
       final Counters.Counter combineInputCounter =
         reporter.getCounter(TaskCounter.COMBINE_INPUT_RECORDS);
@@ -976,7 +980,7 @@ public class MapTask extends Task {
 	IndexRecord rec = new IndexRecord();
 	SpillRecord sr = new SpillRecord(partitions);
 	Path indexFileName, spillFile;
-	IFile.shmWriter<K, V> writer, newWriter;
+	inWriter writer, newWriter;
 	
 	if (combinerRunner != null) {
 	    for (int i = 0; i < partitions; i++) {
@@ -984,7 +988,7 @@ public class MapTask extends Task {
 		long hashSize = writer.getHashSize();
 		writer.rename();
 		spillFile = mapOutputFile.getSpillFileForWrite(i);
-		newWriter = new shmWriter<K, V>(job, spillFile, keyClass, valClass, codec, null, hashSize);
+		newWriter = globalWriter.new inWriter(spillFile, hashSize);
 		mapWriter.set(i, newWriter);
 		combineCollector.setWriter(newWriter);
 		combinerRunner.combine(writer.getIterator(), combineCollector);
@@ -993,6 +997,8 @@ public class MapTask extends Task {
 	    }
 	}
 	
+	globalWriter.close_static();
+
 	for (int i = 0; i < partitions; i++) {
 	    writer = mapWriter.get(i);
 	    writer.close();

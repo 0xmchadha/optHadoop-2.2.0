@@ -286,11 +286,11 @@ public class Text extends BinaryComparable
   /** deserialize 
    */
   @Override
-  public void readFields(DataInput in) throws IOException {
-    int newLength = WritableUtils.readVInt(in);
-    setCapacity(newLength, false);
-    in.readFully(bytes, 0, newLength);
-    length = newLength;
+      public void readFields(DataInput in) throws IOException {
+      int newLength = WritableUtils.readVInt(in);
+      setCapacity(newLength, false);
+      in.readFully(bytes, 0, newLength);
+      length = newLength;
   }
   
   public void readFields(DataInput in, int maxLength) throws IOException {

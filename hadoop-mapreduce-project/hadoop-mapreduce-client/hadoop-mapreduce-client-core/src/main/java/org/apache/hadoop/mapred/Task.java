@@ -53,6 +53,7 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.mapred.IFile.shmWriter;
+import org.apache.hadoop.mapred.IFile.shmWriter.inWriter;
 import org.apache.hadoop.mapreduce.FileSystemCounter;
 import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.TaskCounter;
@@ -1281,7 +1282,7 @@ abstract public class Task implements Writable, Configurable {
   @InterfaceStability.Unstable
   public static class CombineOutputCollector<K extends Object, V extends Object> 
   implements OutputCollector<K, V> {
-    private shmWriter<K, V> writer;
+    private inWriter writer;
     private Counters.Counter outCounter;
     private Progressable progressable;
     private long progressBar;
@@ -1292,7 +1293,7 @@ abstract public class Task implements Writable, Configurable {
       progressBar = conf.getLong(MRJobConfig.COMBINE_RECORDS_BEFORE_PROGRESS, DEFAULT_COMBINE_RECORDS_BEFORE_PROGRESS);
     }
     
-    public synchronized void setWriter(shmWriter<K, V> writer) {
+    public synchronized void setWriter(inWriter writer) {
       this.writer = writer;
     }
 

@@ -268,6 +268,7 @@ public final class WritableUtils  {
    * @param i Long to be serialized
    * @throws java.io.IOException 
    */
+	
   public static void writeVLong(DataOutput stream, long i) throws IOException {
     if (i >= -112 && i <= 127) {
       stream.writeByte((byte)i);
@@ -296,8 +297,23 @@ public final class WritableUtils  {
       stream.writeByte((byte)((i & mask) >> shiftbits));
     }
   }
-  
-
+    
+    public static byte writeIntOpt(int i) {
+	if (i >= -112 && i <= 127) {
+	    return (byte)i;
+	}
+	return 0;
+    }
+    
+    public static long readIntOpt(byte b) {
+	byte firstByte = b;
+	int len = decodeVIntSize(firstByte);
+	if (len == 1) {
+	    return firstByte;
+	}
+	return firstByte;
+    }
+    
   /**
    * Reads a zero-compressed encoded long from input stream and returns it.
    * @param stream Binary input stream

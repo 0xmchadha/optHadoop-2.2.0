@@ -27,6 +27,8 @@ import java.util.List;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
+import java.nio.MappedByteBuffer;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -55,6 +57,8 @@ import org.apache.hadoop.mapreduce.task.reduce.Shuffle;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.ReflectionUtils;
+
+import org.apache.hadoop.io.WritableUtils;
 
 /** A Reduce task. */
 @InterfaceAudience.Private
@@ -436,9 +440,10 @@ public class ReduceTask extends Task {
 	JobConf job;
 	public org.apache.hadoop.mapreduce.RecordWriter trackedRW;
 	private SharedHashMap shmFinal; 
+	MappedByteBuffer mbf;
 	private int arrListIndex = 0;
-	private DataInputBuffer indexInpBuffer = new DataInputBuffer();
-	private byte[] result = new byte[4];
+	//	private DataInputBuffer indexInpBuffer = new DataInputBuffer();
+	//	private byte[] result = new byte[4];
 	private boolean userWriteOutput = false;
 
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
@@ -482,8 +487,9 @@ public class ReduceTask extends Task {
 		    }
 		};
 	    
-	    indexInpBuffer.reset(result, 0, 4); 
+	    //	    indexInpBuffer.reset(result, 0, 4); 
 	    shmFinal = new SharedHashMap("shmFinal_" + getTaskID(), true);
+	    mbf = shmFinal.getMappedByteBuf();
 	    // make a task context so we can get the classes
 	    taskContext = 
 		new org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl(job, getTaskID(), reporter);
@@ -508,12 +514,13 @@ public class ReduceTask extends Task {
 						 valueClass);
 	}
       
-	private void modifyInputBuffer(int i) {
+	/*	private void modifyInputBuffer(int i) {
 	    result[0] = (byte) (i);
 	    result[1] = (byte) (i >> 8);
 	    result[2] = (byte) (i >> 16);
 	    result[3] = (byte) (i >> 24); 
 	}
+	*/
 	
 	private int getIndex(DataInputBuffer input) {
 	    int index;
@@ -527,11 +534,36 @@ public class ReduceTask extends Task {
 	    return index;
 	}
 	
+	public int writeShm(MappedByteBuffer mbf, int off, int i) throws IOException {
+	    byte mc_b = WritableUtils.writeIntOpt(4);
+	    
+	    mbf.put(off, mc_b);
+	    mbf.put(off + 1, (byte) (i));
+	    mbf.put(off + 2, (byte) (i >> 8));
+	    mbf.put(off + 3, (byte) (i >> 16));
+	    mbf.put(off + 4, (byte) (i >> 24)); 
+	    return off+1;
+	}
+
+    public int writeShm(MappedByteBuffer mbf, int off, DataInputBuffer key) throws IOException {
+	    byte[] keyb = key.getData();
+	    int len = key.getLength();
+
+	    byte mc_b = WritableUtils.writeIntOpt(len);
+	    mbf.put(off, mc_b);
+	    
+	    for (int i = 0; i < len; i++) {
+		mbf.put(off + 1 + i, keyb[i]);
+	    }
+	    return off+1;
+    }
+	
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
 	    void runShm(org.apache.hadoop.mapreduce.Reducer.Context  context) throws IOException, InterruptedException, ClassNotFoundException {
 	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
 	    DataInputBuffer keyBuf;
 	    int index;
+	    int offset, keyOff, valOff;
 	    //	    setup(context);
 	    while (context.nextKey()) {
 		keyBuf = context.getKeyBuf();
@@ -539,8 +571,14 @@ public class ReduceTask extends Task {
 		if (index == -1) {
 		    reducer = (org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>) ReflectionUtils.newInstance(taskContext.getReducerClass(), job);
 		    reducerList.add(reducer);
-		    modifyInputBuffer(arrListIndex++);
-		    shmFinal.put(keyBuf, indexInpBuffer);
+		    
+		    offset = shmFinal.getOffset();
+		    //		    modifyInputBuffer(arrListIndex++);
+		    valOff = writeShm(mbf, offset, arrListIndex++);
+		    keyOff = writeShm(mbf, offset + 9, keyBuf);
+		    
+		    shmFinal.put(valOff, 4, keyOff, keyBuf.getLength());
+		    //  shmFinal.put(keyBuf, indexInpBuffer);
 		} else
 		    reducer = reducerList.get(index);
 		
@@ -570,6 +608,7 @@ public class ReduceTask extends Task {
 	    int index;
 	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
 	    if (userWriteOutput == true) {
+		LOG.info("MC: writing output");
 		iter = shmFinal.getFinalIterator();
 		//reducerContext.newIterator();
 		iter.start();
