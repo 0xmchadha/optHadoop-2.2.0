@@ -155,8 +155,9 @@ public class IFile {
 	    get_offset += (1 + bytes_written);
 	    
 	    /* write null pointer */
-	    for(int i = 0; i < 4; i++) 
-		mbf.put(get_offset + i, (byte)0);
+	    //	    for(int i = 0; i < 4; i++) 
+	    mbf.putInt(get_offset, 0);
+
 	    get_offset += (1 + 4);
 	    kvbuf.change_buf(mbf, get_offset);
 	    keyOff = get_offset;

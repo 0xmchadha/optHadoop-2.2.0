@@ -320,7 +320,7 @@ public class ReduceTask extends Task {
     RawComparator comparator = job.getOutputValueGroupingComparator();
     
     iterate = new iterativeComputing(job, umbilical, reporter, keyClass, valueClass);
-
+    
     boolean isLocal = false; 
     // local if
     // 1) framework == local or
@@ -445,6 +445,8 @@ public class ReduceTask extends Task {
 	//	private DataInputBuffer indexInpBuffer = new DataInputBuffer();
 	//	private byte[] result = new byte[4];
 	private boolean userWriteOutput = false;
+	Class<?> ReducerClazz;
+	private int count = 0;
 
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
 	    iterativeComputing(JobConf job, 
@@ -493,9 +495,9 @@ public class ReduceTask extends Task {
 	    // make a task context so we can get the classes
 	    taskContext = 
 		new org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl(job, getTaskID(), reporter);
-	    
+	    ReducerClazz = taskContext.getReducerClass();
 	    try {
-		if (taskContext.getReducerClass() == taskContext.getReducerClass().getMethod("writeReduceOp").getDeclaringClass())
+		if (ReducerClazz == ReducerClazz.getMethod("writeReduceOp").getDeclaringClass())
 		    userWriteOutput = true;
 	    } catch(NoSuchMethodException e) {
 		LOG.info("not found");
@@ -570,6 +572,10 @@ public class ReduceTask extends Task {
 		index = getIndex(shmFinal.get(keyBuf));
 		if (index == -1) {
 		    reducer = (org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>) ReflectionUtils.newInstance(taskContext.getReducerClass(), job);
+		    if (count == 0) {
+			setup(reducer);
+			count++;
+		    }
 		    reducerList.add(reducer);
 		    
 		    offset = shmFinal.getOffset();
@@ -623,9 +629,13 @@ public class ReduceTask extends Task {
 	    trackedRW.close(reducerContext);
 	}
 
+	public void setup(org.apache.hadoop.mapreduce.Reducer reducer) throws IOException, InterruptedException {
+	    reducer.setup(reducerContext);
+	}
+
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
 	    void cleanup() throws IOException, InterruptedException{
-	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;  
+	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer; 
 	    reducer = reducerList.get(0);
 	    reducer.cleanup(reducerContext);
 	}
