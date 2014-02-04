@@ -48,7 +48,7 @@ import org.apache.hadoop.io.WritableUtils;
 */
 
 public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>, MultiValueMap<DataInputBuffer, DataInputBuffer> {
-
+    
     /** The byte length of an integer */
     public static final int INTLENGTH = 4;
 	
@@ -208,7 +208,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	 * ---------------------
 	 */
 	private static final int MAX_CUCKOO = 500;
-	private int hashSize =  STARTING_ADDRESS + 65536 * slotSize; // grows in multiples of 2
+	private int hashSize =  STARTING_ADDRESS + 65536 * slotSize*4; // grows in multiples of 2
 	private int dataSize = STARTING_ADDRESS + 256*1024*1024; // 256MB is an upperbound
 	private keyInfo nKey; // new key
 	private keyInfo rKey; // replaced key
@@ -218,7 +218,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	private static final int MAX_LEN = 64;
 	private byte[] byteArr = new byte[MAX_LEN];
 	private DataInputBuffer buf = new DataInputBuffer();
-
+	
 	Random generator = new Random();
 	private int numKeys = 0;
 	private repInfo repinfo = new repInfo();
@@ -343,6 +343,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	
 	private int addKV(int keyOff, int keyLen, int valOff, int valLen,
 			  byte tag, int hashAddr) {
+	    
 	    hma.put(STARTING_ADDRESS + hashAddr, tag);
 	    hma.putInt(STARTING_ADDRESS + hashAddr + 1, valOff - 1);
 
@@ -356,10 +357,9 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 
 	private int addNextValue(int NvalOff, int NvalLen, int dataAddr) {
 	    int valLen = (int)WritableUtils.readIntOpt(dma.get(dataAddr));
-	    
 	    int nextPtr = dma.getInt(dataAddr + valLen + 1);
-	    
-	    dma.putInt(NvalOff + valLen, nextPtr);
+
+	    dma.putInt(NvalOff + NvalLen, nextPtr);
 	    dma.putInt(dataAddr + valLen + 1, NvalOff - 1);
 
 	    return NvalOff + NvalLen + INTLENGTH;
@@ -445,12 +445,28 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    new File(groupName + "_tmphash").renameTo(file);
 	}
 	
+	/*	private void test() throws IOException {
+	    ShmKVIterator iter = getIterator();
+	    DataInputBuffer test_buf;
+	    boolean nextKeyIsSame;
+
+	    iter.start();
+
+	    do {
+		nextKeyIsSame = iter.isNextKeySame();
+		if (nextKeyIsSame == false)
+		    test_buf = iter.getKey();
+		//		test_buf = iter.getValue();
+	    } while(iter.next());
+		
+	}
+	*/
 	private void put(int valOff, int valLen, int keyOff, int keyLen) throws IOException {
 
 	    boolean found = false;
 	    boolean replaced = true;
 	    boolean checkOther = false;
-	    int availableAddress = getAvailableAddress(dma);
+	    //	    int availableAddress = getAvailableAddress(dma);
 	    slotInfo slot = null;
 	    int random;
 	    int randHashEntry;
@@ -474,7 +490,6 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    }
 	    
 	    if (found == true) {
-
 		setAvailableAddress(dma, addNextValue(valOff, valLen, slot.dataAddress));
 		return;
 	    }
@@ -572,7 +587,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    private int dataLoc;
 	    DataInputBuffer buf;
 	    byte[] byteArr;
-	    boolean NextKeySame;
+	    boolean NextKeySame = false;
 	    private static final int MAX_LEN = 64;
 	    
 	    public ShmIterator() {
@@ -639,7 +654,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		    byte[] nval = new byte[valLen];
 		    valp = nval;
 		}
-		
+
 		for (int i = 0; i < valLen; i++) {
 		    valp[i] = dma.get(dataLoc + 1 + i);
 		}
@@ -658,6 +673,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		dataAdd = hma.getInt(hashLoc + 1);
 		
 		valLen = (int)WritableUtils.readIntOpt(dma.get(dataAdd));
+		
 		dataAdd += (1 + valLen + INTLENGTH);
 		keyLen = (int)WritableUtils.readIntOpt(dma.get(dataAdd));
 
@@ -793,8 +809,9 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 			    dataLoc = dataOffset + nDataAdd;
 			    break;
 			}
-		    } else 
+		    } else {
 			dataLoc = dataOffset + nDataAdd;
+		    }
 		    return true;
 		}
 		return false;
@@ -814,7 +831,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		for (int i = 0; i < valLen; i++) {
 		    valp[i] = shm.get(dataLoc + 1 + i);
 		}
-		
+
 		buf.reset(valp, 0, valLen);
 		return buf;
 	    }
@@ -829,6 +846,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		dataAdd = shm.getInt(hashLoc + 1);
 
 		valLen = (int)WritableUtils.readIntOpt(shm.get(dataOffset + dataAdd));
+
 		dataAdd += (dataOffset + 1 + valLen + INTLENGTH);
 		keyLen = (int)WritableUtils.readIntOpt(shm.get(dataAdd));
 

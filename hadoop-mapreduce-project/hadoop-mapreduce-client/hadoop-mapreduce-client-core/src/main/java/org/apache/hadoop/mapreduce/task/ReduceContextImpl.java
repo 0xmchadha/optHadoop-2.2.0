@@ -191,6 +191,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       //  LOG.info(nextVal.getData()[i]);
       
       buffer.reset(nextVal.getData(), 0, nextVal.getLength());
+
       value = valueDeserializer.deserialize(value);
 
       currentValueLength = nextVal.getLength();

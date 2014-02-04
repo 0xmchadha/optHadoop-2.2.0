@@ -614,7 +614,6 @@ public class ReduceTask extends Task {
 	    int index;
 	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
 	    if (userWriteOutput == true) {
-		LOG.info("MC: writing output");
 		iter = shmFinal.getFinalIterator();
 		//reducerContext.newIterator();
 		iter.start();
