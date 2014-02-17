@@ -19,76 +19,94 @@ package org.apache.hadoop.mapred;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.MappedByteBuffer;
+ import java.io.DataOutputStream;
+ import java.io.EOFException;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.nio.MappedByteBuffer;
 
-import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.classification.InterfaceStability;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.DataInputBuffer;
-import org.apache.hadoop.io.DataOutputBuffer;
-import org.apache.hadoop.io.MappedDataOutputBuffer;
-import org.apache.hadoop.io.IOUtils;
-import org.apache.hadoop.io.WritableUtils;
-import org.apache.hadoop.io.compress.CodecPool;
-import org.apache.hadoop.io.compress.CompressionCodec;
-import org.apache.hadoop.io.compress.CompressionOutputStream;
-import org.apache.hadoop.io.compress.Compressor;
-import org.apache.hadoop.io.compress.Decompressor;
-import org.apache.hadoop.io.serializer.SerializationFactory;
-import org.apache.hadoop.io.serializer.Serializer;
+ import org.apache.hadoop.classification.InterfaceAudience;
+ import org.apache.hadoop.classification.InterfaceStability;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.DataInputBuffer;
+ import org.apache.hadoop.io.DataOutputBuffer;
+ import org.apache.hadoop.io.MappedDataOutputBuffer;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.io.WritableUtils;
+ import org.apache.hadoop.io.compress.CodecPool;
+ import org.apache.hadoop.io.compress.CompressionCodec;
+ import org.apache.hadoop.io.compress.CompressionOutputStream;
+ import org.apache.hadoop.io.compress.Compressor;
+ import org.apache.hadoop.io.compress.Decompressor;
+ import org.apache.hadoop.io.serializer.SerializationFactory;
+ import org.apache.hadoop.io.serializer.Serializer;
 
-import org.apache.hadoop.mapred.SharedHashMap;
+ import org.apache.hadoop.mapred.SharedHashMap;
 
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
 
-/**
- * <code>IFile</code> is the simple <key-len, value-len, key, value> format
- * for the intermediate map-outputs in Map-Reduce.
- *
- * There is a <code>Writer</code> to write out map-outputs in this format and 
- * a <code>Reader</code> to read files of this format.
- */
-@InterfaceAudience.Private
-@InterfaceStability.Unstable
-public class IFile {
-  private static final Log LOG = LogFactory.getLog(IFile.class);
-  public static final int EOF_MARKER = -1; // End of File Marker
+ /**
+  * <code>IFile</code> is the simple <key-len, value-len, key, value> format
+  * for the intermediate map-outputs in Map-Reduce.
+  *
+  * There is a <code>Writer</code> to write out map-outputs in this format and 
+  * a <code>Reader</code> to read files of this format.
+  */
+ @InterfaceAudience.Private
+ @InterfaceStability.Unstable
+ public class IFile {
+   private static final Log LOG = LogFactory.getLog(IFile.class);
+   public static final int EOF_MARKER = -1; // End of File Marker
 
-  public static class shmWriter<K extends Object, V extends Object> {    
-    Class<K> keyClass;
-    Class<V> valueClass;
-    Serializer<K> keySerializer;
-    Serializer<V> valueSerializer;
-        
-    private long numRecordsWritten = 0;
-    private Counters.Counter writtenRecordsCounter;
-    MappedDataOutputBuffer kvbuf;
-    
-    public shmWriter(Configuration conf, 
-		     Class<K> keyClass,
-		     Class<V> valueClass,
-		     CompressionCodec codec,
-		     Counters.Counter writesCounter) throws IOException {
-	this.keyClass = keyClass;
-	this.valueClass = valueClass;
-	SerializationFactory serializationFactory = new SerializationFactory(conf);
-	this.writtenRecordsCounter = writesCounter;
-	this.keySerializer = serializationFactory.getSerializer(keyClass);
-	kvbuf = new MappedDataOutputBuffer();
-	this.keySerializer.open(kvbuf);
-	this.valueSerializer = serializationFactory.getSerializer(valueClass);
-	this.valueSerializer.open(kvbuf);
-    }
+   public static class shmWriter<K extends Object, V extends Object> {    
+     Class<K> keyClass;
+     Class<V> valueClass;
+     Serializer<K> keySerializer;
+     Serializer<V> valueSerializer;
+
+     private long numRecordsWritten = 0;
+     private Counters.Counter writtenRecordsCounter;
+     MappedDataOutputBuffer kvbuf;
+     private int pred_uniq_keys;
+
+     public shmWriter(Configuration conf, 
+		      Class<K> keyClass,
+		      Class<V> valueClass,
+		      CompressionCodec codec,
+		      Counters.Counter writesCounter) throws IOException {
+	 int bs, rs, rts;
+	 int check;
+	 float avg_col;
+	 JobConf job = (JobConf)conf;
+	 this.keyClass = keyClass;
+	 this.valueClass = valueClass;
+	 SerializationFactory serializationFactory = new SerializationFactory(conf);
+	 this.writtenRecordsCounter = writesCounter;
+	 this.keySerializer = serializationFactory.getSerializer(keyClass);
+	 kvbuf = new MappedDataOutputBuffer();
+	 this.keySerializer.open(kvbuf);
+	 this.valueSerializer = serializationFactory.getSerializer(valueClass);
+	 this.valueSerializer.open(kvbuf);
+	 
+	 check = Integer.parseInt(job.get("CHANGE_DEFAULT"));
+
+	 if (check == 1) {
+	     bs = Integer.parseInt(job.get("BLOCK_SIZE"));
+	     rs = Integer.parseInt(job.get("AVG_REC_SIZE"));
+	     rts = job.getNumReduceTasks();
+	     avg_col = Float.parseFloat(job.get("AVG_COLLISION"));
+	     
+	     pred_uniq_keys = (int)((bs/(rs*rts*avg_col)) * 100/93);
+	 } else {
+	     pred_uniq_keys = 65536/4;
+	 }
+     }
     
     public void close_static() throws IOException {
 	// Close the serializers
@@ -111,7 +129,7 @@ public class IFile {
 			 long hash_size) throws IOException {
     
 	    if (hash_size == 0)
-		shm = new SharedHashMap(shmFile.toString(), true);
+		shm = new SharedHashMap(shmFile.toString(), true, pred_uniq_keys);
 	    else 
 		shm = new SharedHashMap(shmFile.toString(), hash_size);
 	}

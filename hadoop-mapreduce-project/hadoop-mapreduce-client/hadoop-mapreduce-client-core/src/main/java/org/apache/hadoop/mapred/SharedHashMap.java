@@ -22,6 +22,7 @@ import org.apache.hadoop.mapred.ShmKVIterator;
 import org.apache.hadoop.mapred.CityHash;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.io.WritableUtils;
+
 /**
  * HashMap implementation that passes calls onto a memory-mapped file system.
  * For sharing a single HashMap amongst JVM instances on a single machine
@@ -208,7 +209,8 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	 * ---------------------
 	 */
 	private static final int MAX_CUCKOO = 500;
-	private int hashSize =  STARTING_ADDRESS + 65536 * slotSize*4; // grows in multiples of 2
+	private int hashSize;
+	//	private int hashSize =  STARTING_ADDRESS + 65536 * slotSize*4; // grows in multiples of 2
 	private int dataSize = STARTING_ADDRESS + 256*1024*1024; // 256MB is an upperbound
 	private keyInfo nKey; // new key
 	private keyInfo rKey; // replaced key
@@ -241,12 +243,15 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    slotInfo slot;
 	}
 
-	public createHash(String fileName, long hash_size) throws IOException {
+	public createHash(String fileName, long hash_size, int uniq_keys) throws IOException {
 	    groupName = fileName;
 	    hmf = new RandomAccessFile(fileName + ".hash", "rw");
 	    dmf = new RandomAccessFile(fileName + ".data", "rw");
 	    if (hash_size != -1)
 		hashSize = (int) hash_size;
+	    else
+		hashSize = STARTING_ADDRESS + slotSize * uniq_keys;
+
 	    hmf.setLength(hashSize);
 	    dmf.setLength(dataSize);
 	    hma = hmf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, hmf.length());
@@ -880,10 +885,10 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	}
     }
 
-    public SharedHashMap(String shmFile, boolean isCreating) {
+    public SharedHashMap(String shmFile, boolean isCreating, int pred_keys) {
 	try {
 	    if (isCreating == true) {
-		createCuckoo = new createHash(shmFile, -1);
+		createCuckoo = new createHash(shmFile, -1, pred_keys);
 	    } else {
 		/*		Random randomGenerator = new Random();
 		int m = 0;
@@ -906,7 +911,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
     }
     
     public SharedHashMap(String shmFile, long hash_size) throws IOException {
-	createCuckoo = new createHash(shmFile, hash_size);
+	createCuckoo = new createHash(shmFile, hash_size, 0);
     }
 
     //    public void put(DataInputBuffer key, DataInputBuffer value) throws IOException {

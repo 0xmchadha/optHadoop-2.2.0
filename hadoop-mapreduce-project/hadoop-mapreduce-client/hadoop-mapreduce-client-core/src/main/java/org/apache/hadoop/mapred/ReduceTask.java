@@ -490,7 +490,7 @@ public class ReduceTask extends Task {
 		};
 	    
 	    //	    indexInpBuffer.reset(result, 0, 4); 
-	    shmFinal = new SharedHashMap("shmFinal_" + getTaskID(), true);
+	    shmFinal = new SharedHashMap("shmFinal_" + getTaskID(), true, 64 * 1024);
 	    mbf = shmFinal.getMappedByteBuf();
 	    // make a task context so we can get the classes
 	    taskContext = 
@@ -567,6 +567,7 @@ public class ReduceTask extends Task {
 	    int index;
 	    int offset, keyOff, valOff;
 	    //	    setup(context);
+	    long end = 0;
 	    while (context.nextKey()) {
 		keyBuf = context.getKeyBuf();
 		index = getIndex(shmFinal.get(keyBuf));
@@ -587,9 +588,13 @@ public class ReduceTask extends Task {
 		    //  shmFinal.put(keyBuf, indexInpBuffer);
 		} else
 		    reducer = reducerList.get(index);
-		
+		long start = System.currentTimeMillis();
 		reducer.reduceShm((INKEY)context.getCurrentKey(), context.getValues(), context);
+		end += (System.currentTimeMillis() - start);
 	    }
+
+	    LOG.info("shmreduce = " + end);
+	    //	    System.out.println("shmreduce = " + (end-start));
 	    //	    cleanup(context);
 	}
 
@@ -613,6 +618,7 @@ public class ReduceTask extends Task {
 	    ShmKVIterator iter;
 	    int index;
 	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
+	    long start = System.currentTimeMillis();
 	    if (userWriteOutput == true) {
 		iter = shmFinal.getFinalIterator();
 		//reducerContext.newIterator();
@@ -625,6 +631,8 @@ public class ReduceTask extends Task {
 		
 		//	    reducer.writeOutput(reducerContext);
 	    }	
+	    long end = System.currentTimeMillis();
+	    LOG.info("write time = " + (end - start));
 	    trackedRW.close(reducerContext);
 	}
 

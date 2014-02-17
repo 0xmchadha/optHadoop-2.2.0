@@ -180,7 +180,7 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
   
   public void closeOnDiskFile(CompressAwarePath file) {
       shmrun.numPending.incrementAndGet();
-      SharedHashMap shMap = new SharedHashMap(file.toString(), false);
+      SharedHashMap shMap = new SharedHashMap(file.toString(), false, 0);
       
       synchronized(shmList) {
 	  shmList.add(shMap);
