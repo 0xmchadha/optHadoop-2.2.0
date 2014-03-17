@@ -184,7 +184,8 @@ import java.io.DataInputStream;
 	    keyLen = bytes_written;
 	    
 	    if (bytes_written >= 127)  {
-		throw new IOException("key value size not in limit");
+		return;
+		//		throw new IOException("key value size not in limit");
 		// error
 	    }
 	    

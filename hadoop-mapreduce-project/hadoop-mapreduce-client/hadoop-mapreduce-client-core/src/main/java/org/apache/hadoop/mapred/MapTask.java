@@ -993,7 +993,7 @@ public class MapTask extends Task {
 		combineCollector.setWriter(newWriter);
 		combinerRunner.combine(writer.getIterator(), combineCollector);
 		writer = null;
-		System.gc();
+		//		System.gc();
 	    }
 	}
 	

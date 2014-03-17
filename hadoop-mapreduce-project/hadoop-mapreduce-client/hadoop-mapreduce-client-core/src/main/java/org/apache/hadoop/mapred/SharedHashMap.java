@@ -541,7 +541,7 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 	    if (cuckooBucket(repinfo) == false) {
 		LOG.info("Doubling");
 		rehash(repinfo, 2);
-		System.gc();
+		//		System.gc();
 	    }
 	}
 	

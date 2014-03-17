@@ -610,7 +610,7 @@ public class ReduceTask extends Task {
     
 	private void destroyShm() {
 	    // reclaim the space 
-	    System.gc();
+	    //	    System.gc();
 	}
 	
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>

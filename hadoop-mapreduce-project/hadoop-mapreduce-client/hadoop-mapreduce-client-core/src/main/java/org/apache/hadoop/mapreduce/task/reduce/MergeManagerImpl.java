@@ -234,7 +234,7 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 		      }
 		      ((org.apache.hadoop.mapred.ReduceTask)reduceTask).iterate.startProcessing(shm);	
 		      shm = null;
-		      System.gc(); // destroy mmap
+		      //		      System.gc(); // destroy mmap
 		  }
 	      } catch (InterruptedException ie) {
 		  numPending.set(0);
