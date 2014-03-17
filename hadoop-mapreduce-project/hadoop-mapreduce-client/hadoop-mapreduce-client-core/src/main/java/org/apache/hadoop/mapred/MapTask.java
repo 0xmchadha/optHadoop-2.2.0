@@ -27,7 +27,6 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -55,7 +54,6 @@ import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.io.serializer.Serializer;
 import org.apache.hadoop.mapred.IFile.Writer;
 import org.apache.hadoop.mapred.IFile.shmWriter;
-import org.apache.hadoop.mapred.IFile.shmWriter.inWriter;
 import org.apache.hadoop.mapred.Merger.Segment;
 import org.apache.hadoop.mapred.SortedRanges.SkipRangeIterator;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -864,7 +862,6 @@ public class MapTask extends Task {
 
     // Compression for map-outputs
     private CompressionCodec codec;
-    private ArrayList<IFile.shmWriter<K, V>.inWriter> mapWriter;
         
     private FileSystem rfs;
     
@@ -898,8 +895,6 @@ public class MapTask extends Task {
       valClass = (Class<V>)job.getMapOutputValueClass();
       serializationFactory = new SerializationFactory(job);
       
-      mapWriter = new ArrayList<IFile.shmWriter<K, V>.inWriter>();
-      
       FSDataOutputStream out;
       Path spillFile;
       
@@ -919,13 +914,11 @@ public class MapTask extends Task {
         codec = null;
       }
       
-      globalWriter = new shmWriter(job, keyClass, valClass, codec, null);
-      inWriter inwriter = null;
+      globalWriter = new shmWriter(job, partitions, keyClass, valClass, codec, null);
       
       for (int i = 0; i < partitions; i++) {
 	  spillFile = mapOutputFile.getSpillFileForWrite(i);
-	  inwriter = globalWriter.new inWriter(spillFile, 0);
-	  mapWriter.add(inwriter);
+	  globalWriter.newReducer(i, spillFile, -1, 0);
       }
       
       // combiner
@@ -937,7 +930,7 @@ public class MapTask extends Task {
       if (combinerRunner != null) {
         final Counters.Counter combineOutputCounter =
           reporter.getCounter(TaskCounter.COMBINE_OUTPUT_RECORDS);
-        combineCollector= new CombineOutputCollector<K,V>(combineOutputCounter, reporter, job);
+        combineCollector= new CombineOutputCollector<K,V>(combineOutputCounter, reporter, job, globalWriter);
       } else {
         combineCollector = null;
       }
@@ -965,7 +958,8 @@ public class MapTask extends Task {
 		throw new IOException("Illegal partition for " + key + " (" +
 				      partition + ")");
 	    }
-	    mapWriter.get(partition).append(key, value);
+            
+            globalWriter.append(key, value, partition);
 	}
     
     private TaskAttemptID getTaskID() {
@@ -980,31 +974,33 @@ public class MapTask extends Task {
 	IndexRecord rec = new IndexRecord();
 	SpillRecord sr = new SpillRecord(partitions);
 	Path indexFileName, spillFile;
-	inWriter writer, newWriter;
-	
+	int writer_num;
+        ShmKVIterator iterator;
+
 	if (combinerRunner != null) {
+            iterator = globalWriter.getIterator();
 	    for (int i = 0; i < partitions; i++) {
-		writer = mapWriter.get(i);
-		long hashSize = writer.getHashSize();
-		writer.rename();
+		long hashSize = globalWriter.getHashSize(i);
+
+		globalWriter.rename(i);
 		spillFile = mapOutputFile.getSpillFileForWrite(i);
-		newWriter = globalWriter.new inWriter(spillFile, hashSize);
-		mapWriter.set(i, newWriter);
-		combineCollector.setWriter(newWriter);
-		combinerRunner.combine(writer.getIterator(), combineCollector);
-		writer = null;
-		//		System.gc();
+                /* -1 because we do not know our partition number */
+		writer_num = globalWriter.newReducer(-1, spillFile, hashSize, 0);
+		combineCollector.setWriter(writer_num);
+                globalWriter.setIterator(i)
+		combinerRunner.combine(iterator, combineCollector);
+                globalWriter.replaceWriter(i, writer_num);
+                //		System.gc();
 	    }
 	}
 	
 	globalWriter.close_static();
 
 	for (int i = 0; i < partitions; i++) {
-	    writer = mapWriter.get(i);
-	    writer.close();
-	    rec.startOffset = writer.getHashSize();
-	    rec.rawLength = writer.getRawLength();
-	    rec.partLength = writer.getCompressedLength();
+            globalWriter.close(i);
+	    rec.startOffset = globalwriter.getHashSize(i);
+	    rec.rawLength = globalwriter.getRawLength(i);
+	    rec.partLength = globalWriter.getCompressedLength(i);
 	    sizeSpillFile += rec.rawLength;
 	    sr.putIndex(rec, i);
 

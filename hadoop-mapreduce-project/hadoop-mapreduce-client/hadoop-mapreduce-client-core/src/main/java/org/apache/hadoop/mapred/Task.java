@@ -53,7 +53,6 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.mapred.IFile.shmWriter;
-import org.apache.hadoop.mapred.IFile.shmWriter.inWriter;
 import org.apache.hadoop.mapreduce.FileSystemCounter;
 import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.TaskCounter;
@@ -70,7 +69,7 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringInterner;
 import org.apache.hadoop.util.StringUtils;
 
-import org.apache.hadoop.mapred.SharedHashMap;
+import org.apache.hadoop.mapred.SharedHashCreate;
 /**
  * Base class for tasks.
  */
@@ -1282,25 +1281,28 @@ abstract public class Task implements Writable, Configurable {
   @InterfaceStability.Unstable
   public static class CombineOutputCollector<K extends Object, V extends Object> 
   implements OutputCollector<K, V> {
-    private inWriter writer;
+    private int writer;
+    private shmWriter writeShm;
     private Counters.Counter outCounter;
     private Progressable progressable;
     private long progressBar;
-
-    public CombineOutputCollector(Counters.Counter outCounter, Progressable progressable, Configuration conf) {
+    
+    
+    public CombineOutputCollector(Counters.Counter outCounter, Progressable progressable, Configuration conf, shmWriter shmWriter) {
       this.outCounter = outCounter;
       this.progressable=progressable;
+      this.writeShm = shmWriter;
       progressBar = conf.getLong(MRJobConfig.COMBINE_RECORDS_BEFORE_PROGRESS, DEFAULT_COMBINE_RECORDS_BEFORE_PROGRESS);
     }
     
-    public synchronized void setWriter(inWriter writer) {
-      this.writer = writer;
+    public synchronized void setWriter(int writer_num) {
+      this.writer = writer_num;
     }
 
     public synchronized void collect(K key, V value)
         throws IOException {
       outCounter.increment(1);
-      writer.append(key, value);
+      writeShm.append(key, value, writer);
       if ((outCounter.getValue() % progressBar) == 0) {
         progressable.progress();
       }

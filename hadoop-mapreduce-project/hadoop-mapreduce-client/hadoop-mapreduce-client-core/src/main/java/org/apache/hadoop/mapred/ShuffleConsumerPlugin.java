@@ -65,7 +65,7 @@ public interface ShuffleConsumerPlugin<K, V> {
     private final Progress mergePhase;
     private final Task reduceTask;
     private final MapOutputFile mapOutputFile;
-
+    private final SharedHashLookup shl;
     public Context(org.apache.hadoop.mapreduce.TaskAttemptID reduceId,
                    JobConf jobConf, FileSystem localFS,
                    TaskUmbilicalProtocol umbilical,
@@ -80,7 +80,7 @@ public interface ShuffleConsumerPlugin<K, V> {
                    Counters.Counter failedShuffleCounter,
                    Counters.Counter mergedMapOutputsCounter,
                    TaskStatus status, Progress copyPhase, Progress mergePhase,
-                   Task reduceTask, MapOutputFile mapOutputFile) {
+                   Task reduceTask, MapOutputFile mapOutputFile, SharedHashLookup shl) {
       this.reduceId = reduceId;
       this.jobConf = jobConf;
       this.localFS = localFS;
@@ -101,6 +101,7 @@ public interface ShuffleConsumerPlugin<K, V> {
       this.mergePhase = mergePhase;
       this.reduceTask = reduceTask;
       this.mapOutputFile = mapOutputFile;
+      this.shl = shl;
     }
 
     public org.apache.hadoop.mapreduce.TaskAttemptID getReduceId() {
@@ -163,6 +164,9 @@ public interface ShuffleConsumerPlugin<K, V> {
     public MapOutputFile getMapOutputFile() {
       return mapOutputFile;
     }
-  } // end of public static class Context<K,V>
+    public SharedHashLookup getHashLookup() {
+      return shl;
+    }
+        } // end of public static class Context<K,V>
 
 }

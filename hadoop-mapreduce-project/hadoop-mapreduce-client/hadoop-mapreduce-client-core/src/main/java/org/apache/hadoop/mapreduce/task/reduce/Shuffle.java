@@ -69,7 +69,7 @@ public class Shuffle<K, V> implements ShuffleConsumerPlugin<K, V>, ExceptionRepo
     this.copyPhase = context.getCopyPhase();
     this.taskStatus = context.getStatus();
     this.reduceTask = context.getReduceTask();
-    
+
     scheduler = new ShuffleSchedulerImpl<K, V>(jobConf, taskStatus, reduceId,
         this, copyPhase, context.getShuffledMapsCounter(),
         context.getReduceShuffleBytes(), context.getFailedShuffleCounter());
@@ -84,7 +84,7 @@ public class Shuffle<K, V> implements ShuffleConsumerPlugin<K, V>, ExceptionRepo
         context.getCombineCollector(), context.getSpilledRecordsCounter(),
         context.getReduceCombineInputCounter(),
         context.getMergedMapOutputsCounter(), this, context.getMergePhase(),
-        context.getMapOutputFile());
+        context.getMapOutputFile(), context.getHashLookup());
   }
 
   @Override
