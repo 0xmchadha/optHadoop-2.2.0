@@ -24,6 +24,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 
 import java.lang.String;
 
@@ -110,8 +112,15 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
   
   private final Progress mergePhase;
 
-  private final ArrayList<SharedHashMap> shmList = new ArrayList<SharedHashMap>();
+  //  private final ArrayList<> shmList = new ArrayList<SharedHashMap>();
   private Task reduceTask;
+  
+  private class shmList {
+      String file;
+      MappedByteBuffer shm;
+  }
+  
+  private final ArrayList<shmList> shmlist = new ArrayList<shmList>();
 
   public MergeManagerImpl(TaskAttemptID reduceId, Task reduceTask,
 			  JobConf jobConf, 
@@ -125,7 +134,8 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 			  Counters.Counter reduceCombineInputCounter,
 			  Counters.Counter mergedMapOutputsCounter,
 			  ExceptionReporter exceptionReporter,
-			  Progress mergePhase, MapOutputFile mapOutputFile) {
+			  Progress mergePhase, MapOutputFile mapOutputFile,
+                          SharedHashLookup shLookups) {
     this.reduceId = reduceId;
     this.jobConf = jobConf;
     this.localDirAllocator = localDirAllocator;
@@ -160,9 +170,9 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
   ExceptionReporter getExceptionReporter() {
     return exceptionReporter;
   }
-
+  
   @Override
-  public void waitForResource() throws InterruptedException {
+      public void waitForResource() throws InterruptedException {
   }
   
   @Override
@@ -176,14 +186,23 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
   
   void unreserve(long size) {
 	  
-      }
+  }
   
   public void closeOnDiskFile(CompressAwarePath file) {
+      shmList tmp;
       shmrun.numPending.incrementAndGet();
-      SharedHashMap shMap = new SharedHashMap(file.toString(), false, 0);
+      RandomAccessFile shf;
+      MappedByteBuffer shm;
+      shf = new RandomAccessFile(file, "r");
+      shm = shf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, shf.length());
+      shm.load(); 
+      
+      tmp = new shmList();
+      tmp.file = file;
+      tmp.dma = shm;
       
       synchronized(shmList) {
-	  shmList.add(shMap);
+	  shmList.add(tmp);
 	  shmList.notify();
       }
   }
@@ -227,14 +246,15 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 		  }
 		  
 		  while (shmList.size() > 0) {
-		      SharedHashMap shm;
+		      shmList Shm;
 		      synchronized (shmList) {
-			  shm = shmList.get(0);
+			  Shm = shmList.get(0);
 			  shmList.remove(0);
 		      }
+                      shLookups.setNewLookup(Shm.file, Shm.shm);
 		      ((org.apache.hadoop.mapred.ReduceTask)reduceTask).iterate.startProcessing(shm);	
 		      shm = null;
-		      System.gc(); // destroy mmap
+                      //		      System.gc(); // destroy mmap
 		  }
 	      } catch (InterruptedException ie) {
 		  numPending.set(0);
@@ -244,7 +264,6 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 		  reporterExcep.reportException(t);
 		  return;
 	      } finally {
-		  ///		  synchronized (this) {
 		  synchronized (numPending) {
 		      numPending.decrementAndGet();
 		      numPending.notifyAll();

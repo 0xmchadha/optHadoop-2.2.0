@@ -851,7 +851,6 @@ public class SharedHashMap { //implements Map<DataInputBuffer, DataInputBuffer>,
 		dataAdd = shm.getInt(hashLoc + 1);
 
 		valLen = (int)WritableUtils.readIntOpt(shm.get(dataOffset + dataAdd));
-
 		dataAdd += (dataOffset + 1 + valLen + INTLENGTH);
 		keyLen = (int)WritableUtils.readIntOpt(shm.get(dataAdd));
 
