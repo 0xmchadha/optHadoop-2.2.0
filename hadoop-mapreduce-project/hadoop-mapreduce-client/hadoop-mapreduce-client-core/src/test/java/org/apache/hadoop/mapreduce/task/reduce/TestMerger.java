@@ -95,7 +95,7 @@ public class TestMerger {
     
     MergeManagerImpl<Text, Text> mergeManager = new MergeManagerImpl<Text, Text>(
 										 reduceId, null, jobConf, fs, lda, Reporter.NULL, null, null, null, null, null,
-        null, null, new Progress(), new MROutputFiles());
+										 null, null, new Progress(), new MROutputFiles(), null);
 
     // write map outputs
     Map<String, String> map1 = new TreeMap<String, String>();

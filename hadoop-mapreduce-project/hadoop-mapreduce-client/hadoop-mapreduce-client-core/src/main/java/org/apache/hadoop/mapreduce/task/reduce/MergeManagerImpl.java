@@ -26,6 +26,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.io.RandomAccessFile;
 
 import java.lang.String;
 
@@ -62,8 +63,7 @@ import org.apache.hadoop.mapreduce.task.reduce.MapOutput.MapOutputComparator;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.ReflectionUtils;
 
-import org.apache.hadoop.mapred.SharedHashMap;
-
+import org.apache.hadoop.mapred.SharedHashLookup;
 import com.google.common.annotations.VisibleForTesting;
 
 @SuppressWarnings(value={"unchecked"})
@@ -111,8 +111,9 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
   private final CompressionCodec codec;
   
   private final Progress mergePhase;
+  
+  private final SharedHashLookup shLookups;
 
-  //  private final ArrayList<> shmList = new ArrayList<SharedHashMap>();
   private Task reduceTask;
   
   private class shmList {
@@ -154,6 +155,7 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
     this.localFS = localFS;
     this.rfs = ((LocalFileSystem)localFS).getRaw();
 
+    this.shLookups = shLookups;
     this.reduceTask = reduceTask;
     this.shmrun = new shmRun(this);
     this.shmrun.start();
@@ -190,20 +192,26 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
   
   public void closeOnDiskFile(CompressAwarePath file) {
       shmList tmp;
-      shmrun.numPending.incrementAndGet();
       RandomAccessFile shf;
-      MappedByteBuffer shm;
-      shf = new RandomAccessFile(file, "r");
-      shm = shf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, shf.length());
-      shm.load(); 
-      
+      MappedByteBuffer shm = null;
+      String fileName = file.toString();
+
+      shmrun.numPending.incrementAndGet();
+      try {
+	  shf = new RandomAccessFile(fileName, "r");
+	  shm = shf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, shf.length());
+	  shm.load(); 
+      } catch (IOException ie) {
+	  
+      }
+
       tmp = new shmList();
-      tmp.file = file;
-      tmp.dma = shm;
+      tmp.file = fileName;
+      tmp.shm = shm;
       
-      synchronized(shmList) {
-	  shmList.add(tmp);
-	  shmList.notify();
+      synchronized(shmlist) {
+	  shmlist.add(tmp);
+	  shmlist.notify();
       }
   }
   
@@ -213,20 +221,20 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
       return null;
   }
    
-  private class shmRun extends MergeThread<SharedHashMap, K, V> {
+  private class shmRun extends MergeThread<SharedHashLookup, K, V> {
       public shmRun(MergeManagerImpl <K, V> manager) {
 	  super(manager, 0, exceptionReporter);
 	  setName("shmRun");
 	  setDaemon(true);
       }
       
-      public void merge(List<SharedHashMap> inputs) throws IOException {
+      public void merge(List<SharedHashLookup> inputs) throws IOException {
 	  
       }
       
       public void closeAll() {
-	  synchronized(shmList) {
-	      shmList.notify();
+	  synchronized(shmlist) {
+	      shmlist.notify();
 	  }
       }
 
@@ -234,9 +242,9 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 	  while (true) {
 	      try {
 		  // Wait for notification to start the merge...
-		  synchronized (shmList) {
-		      while(shmList.size() <= 0 && closed == false) {
-			  shmList.wait();
+		  synchronized (shmlist) {
+		      while(shmlist.size() <= 0 && closed == false) {
+			  shmlist.wait();
 		      }
 		  }
 
@@ -245,15 +253,14 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 		      return;
 		  }
 		  
-		  while (shmList.size() > 0) {
+		  while (shmlist.size() > 0) {
 		      shmList Shm;
-		      synchronized (shmList) {
-			  Shm = shmList.get(0);
-			  shmList.remove(0);
+		      synchronized (shmlist) {
+			  Shm = shmlist.get(0);
+			  shmlist.remove(0);
 		      }
                       shLookups.setNewLookup(Shm.file, Shm.shm);
-		      ((org.apache.hadoop.mapred.ReduceTask)reduceTask).iterate.startProcessing(shm);	
-		      shm = null;
+		      ((org.apache.hadoop.mapred.ReduceTask)reduceTask).iterate.startProcessing();	
 		      // system.gc();
 		  }
 	      } catch (InterruptedException ie) {

@@ -337,7 +337,7 @@ public class ReduceTask extends Task {
       Class combinerClass = conf.getCombinerClass();
       CombineOutputCollector combineCollector = 
         (null != combinerClass) ? 
- 	     new CombineOutputCollector(reduceCombineOutputCounter, reporter, conf) : null;
+	  new CombineOutputCollector(reduceCombineOutputCounter, reporter, conf, null) : null;
 
       Class<? extends ShuffleConsumerPlugin> clazz =
             job.getClass(MRConfig.SHUFFLE_CONSUMER_PLUGIN, Shuffle.class, ShuffleConsumerPlugin.class);
@@ -610,7 +610,7 @@ public class ReduceTask extends Task {
 	    runShm(reducerContext);
 	
 	    // delete the file containing shm
-	    shm.destroyLookupHash();
+	    // shm.destroyLookupHash();
 	}
     
 	private void destroyShm() {
@@ -649,7 +649,7 @@ public class ReduceTask extends Task {
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
 	    void cleanup() throws IOException, InterruptedException{
 	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer; 
-<	    reducer = reducerList.get(0);
+	    reducer = reducerList.get(0);
 	    reducer.cleanup(reducerContext);
 	}
     }

@@ -29,7 +29,7 @@ import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.mapred.IFile.shmWriter;
-import org.apache.hadoop.mapred.IFile.shmWriter.inWriter;
+import org.apache.hadoop.mapred.IFile.shmWriter;
 import org.apache.hadoop.mapred.Task.CombineOutputCollector;
 import org.apache.hadoop.mapred.Task.TaskReporter;
 import org.apache.hadoop.mapreduce.MRJobConfig;
@@ -105,13 +105,13 @@ public class TestCombineOutputCollector {
     TaskReporter mockTaskReporter = mock(TaskReporter.class);
 
     @SuppressWarnings("unchecked")
-    shmWriter<String, Integer>.inWriter mockWriter = mock(inWriter.class);
+    shmWriter mockWriter = mock(shmWriter.class);
 
     Configuration conf = new Configuration();
     conf.set(MRJobConfig.COMBINE_RECORDS_BEFORE_PROGRESS, "2");
     
-    coc = new CombineOutputCollector<String, Integer>(outCounter, mockTaskReporter, conf);
-    coc.setWriter(mockWriter);
+    coc = new CombineOutputCollector<String, Integer>(outCounter, mockTaskReporter, conf, null);
+    coc.setWriter(0);
     verify(mockTaskReporter, never()).progress();
 
     coc.collect("dummy", 1);
@@ -127,12 +127,12 @@ public class TestCombineOutputCollector {
     TaskReporter mockTaskReporter = mock(TaskReporter.class);
 
     @SuppressWarnings("unchecked")
-    shmWriter<String, Integer>.inWriter mockWriter = mock(inWriter.class);
+    shmWriter mockWriter = mock(shmWriter.class);
 
     Configuration conf = new Configuration();
     
-    coc = new CombineOutputCollector<String, Integer>(outCounter, mockTaskReporter, conf);
-    coc.setWriter(mockWriter);
+    coc = new CombineOutputCollector<String, Integer>(outCounter, mockTaskReporter, conf, null);
+    coc.setWriter(0);
     verify(mockTaskReporter, never()).progress();
 
     for(int i = 0; i < Task.DEFAULT_COMBINE_RECORDS_BEFORE_PROGRESS; i++) {

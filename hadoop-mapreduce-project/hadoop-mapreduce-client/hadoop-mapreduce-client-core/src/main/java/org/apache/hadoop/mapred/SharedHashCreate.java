@@ -44,7 +44,7 @@ public class SharedHashCreate {
     private final keyInfo nKey; 
     private final keyInfo rKey;
     private final Random generator = new Random();
-    private final repinfo repinfo = new repInfo();
+    private final repInfo repinfo = new repInfo();
     private final ShmIterator iterator;
 
     /** The byte length of an integer */
@@ -58,12 +58,11 @@ public class SharedHashCreate {
     private static final int slotSize = hashEntryLen * numSlots;
     private static final int STARTING_ADDRESS = 8;
     private static final int dataSize = STARTING_ADDRESS + 256*1024*1024;
-    /*
-      private static final int MAX_CUCKOO = 500;
-      private static final int MAX_LEN = 64;
-      private byte[] byteArr = new byte[MAX_LEN];
-      private DataInputBuffer buf = new DataInputBuffer();
-    */
+    private static final int MAX_CUCKOO = 500;
+    private static final int MAX_LEN = 64;
+    private byte[] byteArr = new byte[MAX_LEN];
+    private DataInputBuffer buf = new DataInputBuffer();
+    
     private static final Log LOG = LogFactory.getLog(SharedHashMap.class.getName());
     
     private class ShmIterator implements ShmKVIterator {
@@ -71,7 +70,7 @@ public class SharedHashCreate {
         private int dataLoc;
         private MappedByteBuffer hma;
         private MappedByteBuffer dma;
-        private int hashsize;
+        private long hashsize;
         private DataInputBuffer buf;
         private byte[] byteArr;
         private boolean NextKeySame = false;
@@ -82,8 +81,8 @@ public class SharedHashCreate {
             buf = new DataInputBuffer();
             byteArr = new byte[MAX_LEN];
         }
-	    
-        public newIterator(int hashmap_num) {
+	
+        public void newIterator(int hashmap_num) {
             hma = SharedHashCreate.this.hma.get(hashmap_num);
             dma = SharedHashCreate.this.dma.get(hashmap_num);
             hashsize = SharedHashCreate.this.hashsizes.get(hashmap_num);
@@ -93,7 +92,7 @@ public class SharedHashCreate {
             NextKeySame = false;
         }
 
-        public boolean start(int hashmap_num) {
+        public boolean start() {
             int dataAdd;
 
             while(true) {
@@ -294,8 +293,8 @@ public class SharedHashCreate {
 	}
     }
 
-    private int growHash(int grow, int hashSize) {
-        return ((hashSize - STARTING_ADDRESS) * grow + STARTING_ADDRESS);
+    private int growHash(int grow, long hashSize) {
+        return (((int)hashSize - STARTING_ADDRESS) * grow + STARTING_ADDRESS);
     }
     
     private void setAvailableAddress(MappedByteBuffer mbf, int val) {
@@ -328,34 +327,34 @@ public class SharedHashCreate {
         iterator = new ShmIterator();
     }
     
-    public int setHashMap(String file_name, int hash_size, int uniq_keys) {
+    public int setHashMap(String file_name, int hash_size, int uniq_keys) throws IOException {
         setHashMap(num_hashmaps++, file_name, hash_size, uniq_keys);
         return num_hashmaps - 1;
     }
     
-    public void setHashMap(int hashmap_num, String file_name, int hash_size, int uniq_keys) {
+    public void setHashMap(int hashmap_num, String file_name, int hash_size, int uniq_keys) throws IOException {
         RandomAccessFile hmf, dmf;
         MappedByteBuffer hma, dma;
         
         hmf = new RandomAccessFile(file_name + ".hash", "rw");
         dmf = new RandomAccessFile(file_name + ".data", "rw");
+	
+        if (hash_size == -1) 
+            hash_size = STARTING_ADDRESS + slotSize * uniq_keys;
+        
+        hashsizes.add(hashmap_num, new Long(hash_size));
 
-        hmf.setLength(hashSize);
+        hmf.setLength(hash_size);
         dmf.setLength(dataSize);
         
-        hma = hmf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, hmf.length());
-        dma = dmf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, dmf.length());
+        hma = hmf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, hash_size);
+        dma = dmf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, dataSize);
         this.hma.add(hashmap_num, hma);
         this.dma.add(hashmap_num, dma);
         this.hmf.add(hashmap_num, hmf);
         this.dmf.add(hashmap_num, dmf);
         this.fileName.add(hashmap_num, file_name);
-        
-        if (hash_size == -1) 
-            hash_size = STARTING_ADDRESS + slotSize * uniq_keys;
-        
-        hashsizes.add(hashmap_num, hash_size);
-        
+                
         setAvailableAddress(hma, STARTING_ADDRESS);
         setAvailableAddress(dma, STARTING_ADDRESS);
     }
@@ -486,7 +485,7 @@ public class SharedHashCreate {
             // in the slot
             
             // see if this new slot is empty
-            findEntry(rep.slot);
+            findEntry(rep.hma, rep.slot);
             
             if (rep.slot.replaced == false) {
                 addKey(hma, rep.slot.hashAddress, rep.tag, rep.addr);
@@ -507,8 +506,9 @@ public class SharedHashCreate {
         int oldHashSize;
         MappedByteBuffer Lhma, Thma; // large and tmp
         RandomAccessFile Lhmf, Thmf;
+	String groupName = fileName.get(rep.hashmap_num);
         
-        oldHashSize = rep.hashsize;
+        oldHashSize = (int)rep.hashsize;
         newHashSize = growHash(growFactor, rep.hashsize);   
         rep.hashsize = newHashSize;
         
@@ -519,12 +519,13 @@ public class SharedHashCreate {
         Thmf = this.hmf.get(rep.hashmap_num);
         Thma = this.hma.get(rep.hashmap_num);
 	    
-        this.hmf.add(rep.hashmap_num, Lhmf);
-        this.hma.add(rep.hashmap_num, Lhma);
-
+        this.hmf.set(rep.hashmap_num, Lhmf);
+        this.hma.set(rep.hashmap_num, Lhma);
+	
         rKey.newHashSize(newHashSize - STARTING_ADDRESS);
         nKey.newHashSize(newHashSize - STARTING_ADDRESS);
         rKey.reboot = true;
+	rep.hma = Lhma;
         cuckooBucket(rep);
 
         for (int i = 0; i < ((oldHashSize - STARTING_ADDRESS)/slotSize); i++) {
@@ -544,7 +545,7 @@ public class SharedHashCreate {
         }
 	    
         rKey.reboot = false;
-        this.hashsizes.set(rep.hashmap_num, newHashSize);
+        this.hashsizes.set(rep.hashmap_num, new Long(newHashSize));
         File file = new File(groupName + ".hash");
         file.delete();
         new File(groupName + "_tmphash").renameTo(file);
@@ -562,7 +563,7 @@ public class SharedHashCreate {
         
         hma = this.hma.get(hashmap_num);
         dma = this.dma.get(hashmap_num);
-        hashsize = hashsizes.get(hashmap_num);
+        hashsize = hashsizes.get(hashmap_num).intValue();
         nKey.newHashSize(hashsize);
         rKey.newHashSize(hashsize);
             
@@ -639,11 +640,10 @@ public class SharedHashCreate {
         }
     }
 
-    private DataInputBuffer retValBuf(int dataLoc) {
+    private DataInputBuffer retValBuf(MappedByteBuffer dma, int dataLoc) {
         byte[] valp;
-	    
         int valLen = (int)WritableUtils.readIntOpt(dma.get(dataLoc));
-	  
+
         valp = byteArr;
         if (valLen > MAX_LEN) {
             byte[] nval = new byte[valLen];
@@ -659,26 +659,29 @@ public class SharedHashCreate {
         return buf;
     }
 
-
-    private DataInputBuffer get(int hashmap_num, DataInputBuffer key) {
+    public DataInputBuffer get(int hashmap_num, DataInputBuffer key) {
         byte[] keybuf = key.getData();
         int keyLength = key.getLength();
+	MappedByteBuffer hma, dma;
 	
-        nKey.newHashSize(this.hashsizes.get(hashmap_num));
+	hma = this.hma.get(hashmap_num);
+	dma = this.dma.get(hashmap_num);
+
+        nKey.newHashSize(this.hashsizes.get(hashmap_num).intValue());
         nKey.newKey(keybuf, 0, keyLength);
         
         hashSlot1.slot = nKey.slot1;
-        keyExists(nKey, hashSlot1);
+        keyExists(hma, dma, nKey, hashSlot1);
 	
         if (hashSlot1.found == true) {
-            return retValBuf(hashSlot1.dataAddress);
+            return retValBuf(dma, hashSlot1.dataAddress);
         }
 	
         hashSlot1.slot = nKey.slot2;
-        keyExists(nKey, hashSlot1);
+        keyExists(hma, dma, nKey, hashSlot1);
 	
         if (hashSlot1.found == true) {
-            return retValBuf(hashSlot1.dataAddress);
+            return retValBuf(dma, hashSlot1.dataAddress);
         }
         return null;
     }
@@ -708,12 +711,12 @@ public class SharedHashCreate {
     }
     
     public void replaceWriter(int i, int j) {
-        hma.set(i, hmf.get(j));
+        hma.set(i, hma.get(j));
         hmf.set(i, hmf.get(j));
         dma.set(i, dma.get(j));
         dmf.set(i, dmf.get(j));
         fileName.set(i, fileName.get(j));
-        hashsizes.set(i, fileName.get(j));
+        hashsizes.set(i, hashsizes.get(j));
     }
         
     public void close(int hashmap_num) {

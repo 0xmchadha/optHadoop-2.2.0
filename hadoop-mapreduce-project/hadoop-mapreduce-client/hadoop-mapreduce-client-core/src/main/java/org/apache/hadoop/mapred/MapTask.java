@@ -985,9 +985,9 @@ public class MapTask extends Task {
 		globalWriter.rename(i);
 		spillFile = mapOutputFile.getSpillFileForWrite(i);
                 /* -1 because we do not know our partition number */
-		writer_num = globalWriter.newReducer(-1, spillFile, hashSize, 0);
+		writer_num = globalWriter.newReducer(-1, spillFile, (int)hashSize, 0);
 		combineCollector.setWriter(writer_num);
-                globalWriter.setIterator(i)
+                globalWriter.setIterator(i);
 		combinerRunner.combine(iterator, combineCollector);
                 globalWriter.replaceWriter(i, writer_num);
                 //		System.gc();
@@ -998,8 +998,8 @@ public class MapTask extends Task {
 
 	for (int i = 0; i < partitions; i++) {
             globalWriter.close(i);
-	    rec.startOffset = globalwriter.getHashSize(i);
-	    rec.rawLength = globalwriter.getRawLength(i);
+	    rec.startOffset = globalWriter.getHashSize(i);
+	    rec.rawLength = globalWriter.getRawLength(i);
 	    rec.partLength = globalWriter.getCompressedLength(i);
 	    sizeSpillFile += rec.rawLength;
 	    sr.putIndex(rec, i);

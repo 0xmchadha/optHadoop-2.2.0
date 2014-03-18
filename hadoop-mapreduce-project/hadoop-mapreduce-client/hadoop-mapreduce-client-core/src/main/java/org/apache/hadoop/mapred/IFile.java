@@ -120,18 +120,21 @@ import java.io.DataInputStream;
          }
     
          public int newReducer(int num_reducer, Path shmFile, 
-                               long hash_size, int keys) throws IOException {
+                               int hash_size, int keys) throws IOException {
              if (num_reducer == -1) {
                  if (keys == 0)
                      return shms.setHashMap(shmFile.toString(), hash_size, pred_uniq_keys);
                  else
-                     return shms.setHashMap(shmFile, hash_size, keys);
+                     return shms.setHashMap(shmFile.toString(), hash_size, keys);
              }
              
-             if (keys == 0)
-                 shms.setHashMap(num_reducer, shmFile.toString(), hash_size, pred_uniq_keys);
-             else
+             if (keys == 0) {
+		 shms.setHashMap(num_reducer, shmFile.toString(), hash_size, pred_uniq_keys);
+	     } else {
                  shms.setHashMap(num_reducer, shmFile.toString(), hash_size, keys);
+	     }
+	     
+	     return num_reducer;
          }
 
          public void close(int num_reducer) throws IOException {

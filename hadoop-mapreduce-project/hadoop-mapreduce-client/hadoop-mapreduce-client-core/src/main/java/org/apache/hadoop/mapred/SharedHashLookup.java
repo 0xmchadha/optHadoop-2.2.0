@@ -31,7 +31,27 @@ import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.io.WritableUtils;
 
 public class SharedHashLookup {
-    MappedByteBuffer shf;
+    /** The byte length of an integer */
+    public static final int INTLENGTH = 4;
+	
+    /** The byte length of a character */
+    public static final int BYTELENGTH = 1;
+	
+    /** Starting index within the data buffer where data begins */
+    //    public static final int STARTINGADDRESS = 8;
+    
+    /** The length of an address */
+    public static final int ADDRESSLENGTH = INTLENGTH;
+    
+    private static final int numSlots = 4;
+    private static final int hashEntryLen = 5;
+    private static final int slotSize = hashEntryLen * numSlots;
+    private static final int STARTING_ADDRESS = 8;
+    
+    /* Total bytes for Progress */
+    private static final Log LOG = LogFactory.getLog(SharedHashMap.class.getName());
+    
+    MappedByteBuffer shm;
     String fileName;
     private ShmIterator iterator;
     
@@ -39,8 +59,8 @@ public class SharedHashLookup {
         iterator = new ShmIterator();
     }
 
-    /* this function is synchronized from the above layer */
-    public int setNewLookup(String fileName, MappedByteBuffer shm) {
+    /* this function is synchronized from the above layers */
+    public void setNewLookup(String fileName, MappedByteBuffer shm) {
         this.shm = shm;
         this.fileName = fileName;
         iterator.newLookup(shm);
@@ -69,7 +89,7 @@ public class SharedHashLookup {
             int dataAdd;
             int keyLen;
             
-            hashLoc = STARTING_ADRESS;
+            hashLoc = STARTING_ADDRESS;
             dataOffset = (int) shm.getLong(0);
 
             while(true) {
@@ -174,7 +194,7 @@ public class SharedHashLookup {
         }
     }
     
-    public ShmKVIterator getIterator(int hashmap_num) {
+    public ShmKVIterator getIterator() {
         return iterator;
     }
 }

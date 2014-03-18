@@ -136,7 +136,7 @@ public class TestMergeManager {
     public StubbedMergeManager(JobConf conf, ExceptionReporter reporter,
 			       CyclicBarrier mergeStart, CyclicBarrier mergeComplete) {
 	super(null, null, conf, mock(LocalFileSystem.class), null, null, null, null,
-	      null, null, null, null, reporter, null, mock(MapOutputFile.class));
+	      null, null, null, null, reporter, null, mock(MapOutputFile.class), null);
 	
       mergeThread.setSyncBarriers(mergeStart, mergeComplete);
     }
@@ -219,7 +219,7 @@ public class TestMergeManager {
     FileSystem fs = FileSystem.getLocal(jobConf);
     MergeManagerImpl<IntWritable, IntWritable> manager =
 	new MergeManagerImpl<IntWritable, IntWritable>(null, null, jobConf, fs, null
-        , null, null, null, null, null, null, null, null, null, mapOutputFile);
+       , null, null, null, null, null, null, null, null, null, mapOutputFile, null);
 
     MergeThread<MapOutput<IntWritable, IntWritable>, IntWritable, IntWritable>
       onDiskMerger = (MergeThread<MapOutput<IntWritable, IntWritable>,
