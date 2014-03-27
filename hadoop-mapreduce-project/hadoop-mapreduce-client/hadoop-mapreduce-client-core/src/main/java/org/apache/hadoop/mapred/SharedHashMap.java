@@ -27,9 +27,7 @@ import org.apache.hadoop.io.WritableUtils;
  * HashMap implementation that passes calls onto a memory-mapped file system.
  * For sharing a single HashMap amongst JVM instances on a single machine
  * 
- * @author Caleb Solano
  * @author Mehul Chadha
- * @author Ruoyu Liu
  *
  */
 

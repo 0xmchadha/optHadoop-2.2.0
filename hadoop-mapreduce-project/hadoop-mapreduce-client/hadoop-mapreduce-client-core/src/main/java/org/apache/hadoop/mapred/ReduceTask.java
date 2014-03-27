@@ -61,6 +61,7 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapred.SharedHashCreate;
 import org.apache.hadoop.mapred.SharedHashLookup;
+import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 
 /** A Reduce task. */
 @InterfaceAudience.Private
@@ -364,7 +365,8 @@ public class ReduceTask extends Task {
     statusUpdate(umbilical);
 
     /* write mr output */
-    iterate.writeOutput();
+    //    iterate.writeOutput();
+    iterat.runShm();
     iterate.cleanup();
 
     if (shuffleConsumerPlugin != null) {
@@ -448,6 +450,7 @@ public class ReduceTask extends Task {
 	private boolean userWriteOutput = false;
 	Class<?> ReducerClazz;
 	private int count = 0;
+        private shmList shmlist;
 
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
 	    iterativeComputing(JobConf job, 
@@ -489,6 +492,10 @@ public class ReduceTask extends Task {
 			boolean ret = rawIter.start();
 			return ret;
 		    }
+
+                    public long getHashVal() {
+                        return rawIter.getHashVal();
+                    }
 		};
 	    
 	    //	    indexInpBuffer.reset(result, 0, 4); 
@@ -566,51 +573,31 @@ public class ReduceTask extends Task {
     }
 	
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
-	    void runShm(org.apache.hadoop.mapreduce.Reducer.Context  context) throws IOException, InterruptedException, ClassNotFoundException {
+	    void runShm() throws IOException, InterruptedException, ClassNotFoundException {
 	    org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
 	    DataInputBuffer keyBuf;
-	    int index;
-	    int offset, keyOff, valOff;
-	    //	    setup(context);
-	    long end = 0;
-	    while (context.nextKey()) {
-		keyBuf = context.getKeyBuf();
-		index = getIndex(shmFinal.get(0, keyBuf));
-		if (index == -1) {
-		    reducer = (org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>) ReflectionUtils.newInstance(taskContext.getReducerClass(), job);
-		    if (count == 0) {
-			setup(reducer);
-			count++;
-		    }
-		    reducerList.add(reducer);
-		    
-		    offset = shmFinal.getOffset(0);
-		    //		    modifyInputBuffer(arrListIndex++);
-		    valOff = writeShm(mbf, offset, arrListIndex++);
-		    keyOff = writeShm(mbf, offset + 9, keyBuf);
-		    
-		    shmFinal.put(0, valOff, 4, keyOff, keyBuf.getLength());
-		    //  shmFinal.put(keyBuf, indexInpBuffer);
-		} else
-		    reducer = reducerList.get(index);
-		long start = System.currentTimeMillis();
-		reducer.reduceShm((INKEY)context.getCurrentKey(), context.getValues(), context);
-		end += (System.currentTimeMillis() - start);
-	    }
+            int hashnum = 0;
+            Iterable<INVALUE> iterable = reducerContext.getValues();
 
-	    LOG.info("shmreduce = " + end);
+            while(hashnum < shmlist.size()) {
+                shl.setNewLookup(shmlist.get(hashnum));
+                reducerContext.newIterator(hashnum);
+                
+                while (reducerContext.nextKey()) {
+                    reducer.reduce((INKEY)reducerContext.getCurrentKey(), iterable, reducerContext);
+                }
+            }
 	    //	    System.out.println("shmreduce = " + (end-start));
 	    //	    cleanup(context);
+            
 	}
 
-	public void startProcessing() throws IOException, InterruptedException, ClassNotFoundException {
+	public void startProcessing(shmlist shmlist) throws IOException, InterruptedException, ClassNotFoundException {
             //	    rawIter = shm.getIterator();
-	    reducerContext.newIterator();
+            this.shmlist = shmlist;
 
-	    runShm(reducerContext);
-	
-	    // delete the file containing shm
-	    // shm.destroyLookupHash();
+            //	    reducerContext.newIterator();
+            //	    runShm(reducerContext);
 	}
     
 	private void destroyShm() {

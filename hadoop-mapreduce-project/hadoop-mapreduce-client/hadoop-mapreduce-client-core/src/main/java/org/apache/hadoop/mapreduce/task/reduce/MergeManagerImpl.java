@@ -64,6 +64,7 @@ import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.ReflectionUtils;
 
 import org.apache.hadoop.mapred.SharedHashLookup;
+import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 import com.google.common.annotations.VisibleForTesting;
 
 @SuppressWarnings(value={"unchecked"})
@@ -116,11 +117,6 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 
   private Task reduceTask;
   
-  private class shmList {
-      String file;
-      MappedByteBuffer shm;
-  }
-  
   private final ArrayList<shmList> shmlist = new ArrayList<shmList>();
 
   public MergeManagerImpl(TaskAttemptID reduceId, Task reduceTask,
@@ -161,7 +157,6 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
     this.shmrun.start();
 
     this.mergePhase = mergePhase;
-
   }
   
   TaskAttemptID getReduceId() {
@@ -239,6 +234,8 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
       }
 
       public void run() {
+          ((org.apache.hadoop.mapred.ReduceTask)reduceTask).iterate.startProcessing(shmlist);	
+
 	  while (true) {
 	      try {
 		  // Wait for notification to start the merge...
@@ -301,6 +298,7 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
       }
       return false;
     }
+
     public void nextRawValue(DataInputBuffer value) throws IOException {
       final DataInputBuffer vb = kvIter.getValue();
       final int vp = vb.getPosition();
@@ -308,6 +306,7 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
       value.reset(vb.getData(), vp, vlen);
       bytesRead += vlen;
     }
+
     public long getPosition() throws IOException {
       return bytesRead;
     }

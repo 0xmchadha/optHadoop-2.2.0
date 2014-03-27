@@ -155,7 +155,7 @@ public class SharedHashCreate {
             for (int i = 0; i < valLen; i++) {
                 valp[i] = dma.get(dataLoc + 1 + i);
             }
-            
+Reduce            
             buf.reset(valp, 0, valLen);
             return buf;
         }
@@ -378,7 +378,7 @@ public class SharedHashCreate {
         int valLen = (int)WritableUtils.readIntOpt(dma.get(dataAddress));
         int keyLen = (int)WritableUtils.readIntOpt(dma.get(dataAddress + (1 + valLen + 4)));
 	    
-        dataAddress += 5 + valLen;
+        dataAddress += (5 + valLen);
 	    
         if (keyLen != key.len) 
             return false;

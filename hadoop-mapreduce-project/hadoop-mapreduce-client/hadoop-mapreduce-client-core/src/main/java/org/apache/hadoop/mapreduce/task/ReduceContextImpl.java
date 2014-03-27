@@ -45,12 +45,12 @@ import org.apache.hadoop.mapreduce.StatusReporter;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.util.Progressable;
 
-import org.apache.hadoop.mapred.SharedHashMap;
+import org.apache.hadoop.mapred.SharedHashLookup;
+import org.apache.hadoop.mapred.SharedHashLookup.shmList;
+import org.apache.hadoop.mapred.SharedHashLookup.iterateValues;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
-
 
 /**
  * The context passed to the {@link Reducer}.
@@ -80,6 +80,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   private DataInputBuffer buffer = new DataInputBuffer();
   private BytesWritable currentRawKey = new BytesWritable();
   private ValueIterable iterable = new ValueIterable();
+  private ValueIterator iterator;
   private boolean isMarked = false;
   private BackupStore<KEYIN,VALUEIN> backupStore;
   private final SerializationFactory serializationFactory;
@@ -94,12 +95,13 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   private DataOutputBuffer vbufop = new DataOutputBuffer();
   private DataInputBuffer vbufip = new DataInputBuffer();
   
-  //  private SharedHashMap shmFinal;
-  
   private static final Log LOG = LogFactory.getLog(ReduceContext.class.getName());
   
   private DataInputBuffer nextKey;
   private DataInputBuffer nextVal;
+
+  private SharedHashLookup shl;
+  private shmList shmlist;
 
   public ReduceContextImpl(Configuration conf, TaskAttemptID taskid,
                            ShmKVIterator input, 
@@ -109,7 +111,8 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
                            OutputCommitter committer,
                            StatusReporter reporter,
                            Class<KEYIN> keyClass,
-                           Class<VALUEIN> valueClass) throws InterruptedException, IOException{
+                           Class<VALUEIN> valueClass) 
+      throws InterruptedException, IOException {
     super(conf, taskid, output, committer, reporter);
     this.input = input;
     this.inputKeyCounter = inputKeyCounter;
@@ -127,24 +130,41 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     this.valueClass = valueClass;
     this.conf = conf;
     this.taskid = taskid;
+    this.shmlist = shmlist;
+
+    iterator = iterable.iterator();
   }
   
-  public void newIterator() {
+  public void setShl(SharedHashLookup shl, shmList shmlist) {
+      this.shl = shl;
+      this.shmlist = shmlist;
+  }
+  
+  public void newIterator(int hashnum) {
       hasMore = input.start();
       nextKeyIsSame = false;
       firstValue = false;
+
+      iterator.setIterNum(hashnum);
   }
   
   /** Start processing next unique key. */
   public boolean nextKey() throws IOException,InterruptedException {
+
       while (hasMore && nextKeyIsSame) {
 	  nextKeyValue();
       }
+
       if (hasMore) {
 	  if (inputKeyCounter != null) {
 	      inputKeyCounter.increment(1);
 	  }
-	  return nextKeyValue();
+
+	  boolean b = nextKeyValue();
+          // update the hashvalue of this key to 
+          // the iterator
+          iterator.setKey(nextKey, input.getHashVal());
+          return b;
       } else {
 	  return false;
       }
@@ -186,15 +206,11 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       
       nextVal = input.getValue();
       
-      //      LOG.info("val length = " + nextVal.getLength());
-      //      for (int i = 0; i < nextVal.getLength(); i++) 
-      //  LOG.info(nextVal.getData()[i]);
-      
       buffer.reset(nextVal.getData(), 0, nextVal.getLength());
 
       value = valueDeserializer.deserialize(value);
 
-      currentValueLength = nextVal.getLength();
+      //currentValueLength = nextVal.getLength();
       
       hasMore = input.next();
 
@@ -204,6 +220,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
 	  nextKeyIsSame = false;
       }
       inputValueCounter.increment(1);
+
       return true;
   }
   
@@ -241,18 +258,76 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   }
   
   protected class ValueIterator implements ReduceContext.ValueIterator<VALUEIN> {
-
     private boolean inReset = false;
     private boolean clearMarkFlag = false;
+    private int hashmap_num;
+    private int iterNum;
+    private int state;
+    private long hashVal;
+    private iterateValues vIter;
 
-    @Override
-    public boolean hasNext() {
-      return firstValue || nextKeyIsSame;
+    public ValueIterator() {
+        vIter = shl.getVIter();
+    }
+
+    public void setIterNum(int iterNum) {
+        iterNum++;
+
+        this.iterNum = iterNum;
+        this.hashmap_num = iterNum;
+    }
+        
+    public void setKey(DataInputBuffer key, long random) {
+        state = 0;
+        hashmap_num = iterNum;
+        vIter.setKeyBuf(key);
     }
 
     @Override
+    public boolean hasNext() {
+        boolean hasNext;
+        
+        if (state == 0) {
+            hasNext = (firstValue || nextKeyIsSame);
+            if (hasNext == true)
+                return true;
+            else
+                state = 1;
+        }
+        
+        while(1) {
+            if (state == 1) {
+                shmList shmlist = shmlist.get(hashmap_num++);
+                vIter.setHashMap(shmlist.shm);
+                
+                if (vIter == null)
+                    return false;
+
+                state = 2;
+            }
+            
+            if (state == 2) {
+                if (vIter.hasNext() == true) {
+                    return true;
+                }
+                else
+                    state = 1;
+            }
+        }
+    }
+  
+    @Override
     public VALUEIN next() {
       // if this is the first record, we don't need to advance
+        DataInputBuffer dib;
+        if (state == 2) {
+            dib = vIter.getValue();
+            buffer.reset(dib.getData(), 0, dib.getLength());
+            value = valueDeserializer.deserialize(value);
+
+            return value;
+        }
+        
 	if (firstValue) {
 	    firstValue = false;
 	    return value;
@@ -260,7 +335,8 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
 	// if this isn't the first record and the next key is different, they
 	// can't advance it here.
 	if (!nextKeyIsSame) {
-	    throw new NoSuchElementException("iterate past last value");
+            
+//	    throw new NoSuchElementException("iterate past last value");
 	}
 	
 	// otherwise, go to the next key/value pair
@@ -381,7 +457,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     @Override
     public Iterator<VALUEIN> iterator() {
       return iterator;
-    } 
+    }
   }
   
   /**
