@@ -50,7 +50,7 @@ abstract class MergeThread<T,K,V> extends Thread {
   public void close() throws InterruptedException {
       closed = true;
       closeAll();
-      waitForMerge();
+      //      waitForMerge();
     //    interrupt();
 
   }

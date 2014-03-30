@@ -22,6 +22,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.util.ArrayList;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -62,8 +63,7 @@ import org.apache.commons.logging.LogFactory;
 @InterfaceAudience.Private
 @InterfaceStability.Unstable
 public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
-    extends TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT> 
-    implements ReduceContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
+    extends TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>     implements ReduceContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
   private ShmKVIterator input;
   private Counter inputValueCounter;
   private Counter inputKeyCounter;
@@ -101,7 +101,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   private DataInputBuffer nextVal;
 
   private SharedHashLookup shl;
-  private shmList shmlist;
+  private ArrayList<shmList> shmlist;
 
   public ReduceContextImpl(Configuration conf, TaskAttemptID taskid,
                            ShmKVIterator input, 
@@ -130,24 +130,38 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     this.valueClass = valueClass;
     this.conf = conf;
     this.taskid = taskid;
-    this.shmlist = shmlist;
-
-    iterator = iterable.iterator();
   }
   
-  public void setShl(SharedHashLookup shl, shmList shmlist) {
+  public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist) {
       this.shl = shl;
       this.shmlist = shmlist;
+      iterator = (ValueIterator)iterable.iterator();
   }
   
-  public void newIterator(int hashnum) {
-      hasMore = input.start();
-      nextKeyIsSame = false;
-      firstValue = false;
+  private void setParams() throws IOException {
+   hasMore = input.start();
+   nextKeyIsSame = false;
+   firstValue = false;
+  }
+  
+  public void newIterator() throws IOException {
+      setParams();
+  }
 
+  public void newIterator(int hashnum) throws IOException {
+      setParams();
       iterator.setIterNum(hashnum);
   }
   
+  public void setKey() {
+      iterator.setKey(nextKey, input.getHashVal());
+  }
+  
+  public void setCombiner() {
+      iterator = (ValueIterator)iterable.iterator();
+      iterator.setCombiner();
+  }
+
   /** Start processing next unique key. */
   public boolean nextKey() throws IOException,InterruptedException {
 
@@ -159,12 +173,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
 	  if (inputKeyCounter != null) {
 	      inputKeyCounter.increment(1);
 	  }
-
-	  boolean b = nextKeyValue();
-          // update the hashvalue of this key to 
-          // the iterator
-          iterator.setKey(nextKey, input.getHashVal());
-          return b;
+	  return nextKeyValue();
       } else {
 	  return false;
       }
@@ -265,9 +274,11 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     private int state;
     private long hashVal;
     private iterateValues vIter;
+    private boolean combiner = false;
 
     public ValueIterator() {
-        vIter = shl.getVIter();
+	if (shl != null)
+	    vIter = shl.getVIter();
     }
 
     public void setIterNum(int iterNum) {
@@ -277,6 +288,10 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
         this.hashmap_num = iterNum;
     }
         
+    public void setCombiner() {
+	combiner = true;
+    }
+
     public void setKey(DataInputBuffer key, long random) {
         state = 0;
         hashmap_num = iterNum;
@@ -291,18 +306,19 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
             hasNext = (firstValue || nextKeyIsSame);
             if (hasNext == true)
                 return true;
-            else
+	    if (combiner == false)
                 state = 1;
+	    else
+		return false;
         }
         
-        while(1) {
+        while(true) {
             if (state == 1) {
-                shmList shmlist = shmlist.get(hashmap_num++);
-                vIter.setHashMap(shmlist.shm);
-                
-                if (vIter == null)
-                    return false;
+		if (hashmap_num == shmlist.size())
+		    return false;
 
+                shmList shlist = shmlist.get(hashmap_num++);
+		vIter.setHashMap(shlist.shm);
                 state = 2;
             }
             
@@ -317,15 +333,18 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     }
   
     @Override
-    public VALUEIN next() {
-      // if this is the first record, we don't need to advance
+	public VALUEIN next() {
+	// if this is the first record, we don't need to advance
         DataInputBuffer dib;
         if (state == 2) {
-            dib = vIter.getValue();
-            buffer.reset(dib.getData(), 0, dib.getLength());
-            value = valueDeserializer.deserialize(value);
-
-            return value;
+	    try {
+		dib = vIter.getValue();
+		buffer.reset(dib.getData(), 0, dib.getLength());
+		value = valueDeserializer.deserialize(value);
+		return value;
+	    } catch (IOException ie) {
+		throw new RuntimeException("iterator failed for shm");
+	    }
         }
         
 	if (firstValue) {
@@ -453,9 +472,11 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   }
 
   protected class ValueIterable implements Iterable<VALUEIN> {
-    private ValueIterator iterator = new ValueIterator();
+      private ValueIterator iterator;
     @Override
     public Iterator<VALUEIN> iterator() {
+	if (iterator == null)
+	     iterator = new ValueIterator();
       return iterator;
     }
   }

@@ -20,12 +20,14 @@ package org.apache.hadoop.mapreduce;
 
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.ArrayList;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
 import org.apache.hadoop.io.DataInputBuffer;
-
+import org.apache.hadoop.mapred.SharedHashLookup;
+import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 /**
  * The context passed to the {@link Reducer}.
  * @param <KEYIN> the class of the input keys
@@ -41,8 +43,13 @@ public interface ReduceContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   /** Start processing next unique key. */
   public boolean nextKey() throws IOException,InterruptedException;
   
-  public void newIterator();
-  //  public VALUEIN getStoredVal() throws IOException, InterruptedException;
+  public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist);
+
+  public void newIterator(int hashnum) throws IOException; 
+  public void newIterator() throws IOException;
+  public void setKey();
+  public void setCombiner();
+  //  public VALUEIN getStoredVal() throws IOException, InterruptedExewIception;
   //  public void store(VALUEIN val) throws IOException, InterruptedException;
   
   public DataInputBuffer getKeyBuf();
@@ -66,7 +73,6 @@ public interface ReduceContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
      * @throws IOException
      */
     void resetBackupStore() throws IOException;
-    
   }
 }
 

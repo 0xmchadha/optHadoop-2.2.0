@@ -19,6 +19,7 @@ package org.apache.hadoop.mapreduce.lib.chain;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configuration.IntegerRanges;
@@ -37,6 +38,9 @@ import org.apache.hadoop.mapreduce.ReduceContext;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.security.Credentials;
+
+import org.apache.hadoop.mapred.SharedHashLookup;
+import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 
 /**
  * A simple wrapper class that delegates most of its functionality to the
@@ -69,10 +73,30 @@ class ChainReduceContextImpl<KEYIN, VALUEIN, KEYOUT, VALUEOUT> implements
   }
 
   @Override
-  public void newIterator() {
+  public void newIterator() throws IOException {
       base.newIterator();
   }
+
+  @Override
+  public void newIterator(int hashnum) throws IOException {
+      base.newIterator(hashnum);
+  }
+
+  @Override
+  public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist) {
+      base.setShl(shl, shmlist);
+  }
   
+  @Override
+  public void setKey() {
+      base.setKey();
+  }
+      
+  @Override
+  public void setCombiner() {
+      base.setCombiner();
+  }
+
   @Override
       public DataInputBuffer getKeyBuf() {
       return base.getKeyBuf();

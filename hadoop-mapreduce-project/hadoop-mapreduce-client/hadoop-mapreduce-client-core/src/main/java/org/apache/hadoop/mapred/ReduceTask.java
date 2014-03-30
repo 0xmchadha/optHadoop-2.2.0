@@ -79,7 +79,7 @@ public class ReduceTask extends Task {
   private static final Log LOG = LogFactory.getLog(ReduceTask.class.getName());
   private int numMaps;
   private CompressionCodec codec;
-
+   
   { 
     getProgress().setStatus("reduce"); 
     setPhase(TaskStatus.Phase.SHUFFLE);        // phase to start with 
@@ -113,6 +113,7 @@ public class ReduceTask extends Task {
     
     public iterativeComputing iterate;
 
+    private SharedHashLookup shl;
     
   public ReduceTask() {
     super();
@@ -319,7 +320,7 @@ public class ReduceTask extends Task {
     Class keyClass = job.getMapOutputKeyClass();
     Class valueClass = job.getMapOutputValueClass();
     RawComparator comparator = job.getOutputValueGroupingComparator();
-    SharedHashLookup shl = new SharedHashLookup(numMaps);
+    shl = new SharedHashLookup(numMaps);
     
     iterate = new iterativeComputing(job, umbilical, reporter, keyClass, valueClass, shl);
     iterate.setup();
@@ -361,7 +362,6 @@ public class ReduceTask extends Task {
       shuffleConsumerPlugin.init(shuffleContext);
       shuffleConsumerPlugin.run();
     }
-    
     sortPhase.complete();                         // sort is complete
     setPhase(TaskStatus.Phase.REDUCE); 
     statusUpdate(umbilical);
@@ -438,20 +438,15 @@ public class ReduceTask extends Task {
 	    reducerContext;
 	public Progress progress;
 	// make a reducer
-        public org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer;
-	//public ArrayList<org.apache.hadoop.mapreduce.Reducer> reducerList;
-	//	public org.apache.hadoop.mapreduce.RecordWriter<OUTKEY,OUTVALUE> trackedRW;
+        public org.apache.hadoop.mapreduce.Reducer reducer;
 	org.apache.hadoop.mapreduce.TaskAttemptContext taskContext;
 	JobConf job;
 	public org.apache.hadoop.mapreduce.RecordWriter trackedRW;
 	MappedByteBuffer mbf;
 	private int arrListIndex = 0;
-	//	private DataInputBuffer indexInpBuffer = new DataInputBuffer();
-	//	private byte[] result = new byte[4];
 	private boolean userWriteOutput = false;
-	Class<?> ReducerClazz;
 	private int count = 0;
-        private shmList shmlist;
+        private ArrayList<shmList> shmlist;
 
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
 	    iterativeComputing(JobConf job, 
@@ -501,11 +496,10 @@ public class ReduceTask extends Task {
 	    
 	    //	    indexInpBuffer.reset(result, 0, 4); 
             rawIter = shl.getIterator();
-            reducer = (org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>) ReflectionUtils.newInstance(taskContext.getReducerClass(), job);
 	    // make a task context so we can get the classes
 	    taskContext = 
 		new org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl(job, getTaskID(), reporter);
-
+            reducer = (org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>) ReflectionUtils.newInstance(taskContext.getReducerClass(), job);
 	    trackedRW = new NewTrackingRecordWriter<OUTKEY, OUTVALUE>(ReduceTask.this, taskContext);
 	      
 	    job.setBoolean("mapred.skip.on", isSkipping());
@@ -529,14 +523,17 @@ public class ReduceTask extends Task {
                 reducerContext.newIterator(hashnum);
                 
                 while (reducerContext.nextKey()) {
+		    reducerContext.setKey();
                     reducer.reduce((INKEY)reducerContext.getCurrentKey(), iterable, reducerContext);
                 }
+		hashnum++;
             }
 	}
 
-	public void startProcessing(shmlist shmlist) throws IOException, InterruptedException, ClassNotFoundException {
+	public void startProcessing(ArrayList<shmList> shmlist) {
             this.shmlist = shmlist;
-	}
+	    reducerContext.setShl(shl, shmlist);
+   	}
     
 	private void destroyShm() {
 	}

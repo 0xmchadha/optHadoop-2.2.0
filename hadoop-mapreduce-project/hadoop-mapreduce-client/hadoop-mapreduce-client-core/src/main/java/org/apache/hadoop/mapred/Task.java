@@ -1637,6 +1637,7 @@ abstract public class Task implements Writable, Configurable {
                                                 reporter, keyClass,
                                                 valueClass);
       reducerContext.newIterator();
+      reducerContext.setCombiner();
       reducer.runShm(reducerContext);
     } 
   }

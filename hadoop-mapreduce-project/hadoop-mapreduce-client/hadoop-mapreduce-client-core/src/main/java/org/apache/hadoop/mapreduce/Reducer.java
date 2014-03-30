@@ -144,7 +144,7 @@ import java.util.Iterator;
      * is an identity function.
      */
     @SuppressWarnings("unchecked")
-	protected void reduce(KEYIN key, Iterable<VALUEIN> values, Context context
+	public void reduce(KEYIN key, Iterable<VALUEIN> values, Context context
 			      ) throws IOException, InterruptedException {
 	for(VALUEIN value: values) {
 	    context.write((KEYOUT) key, (VALUEOUT) value);
@@ -168,9 +168,7 @@ import java.util.Iterator;
     public void runShm(Context context) throws IOException, InterruptedException {
 	setup(context);
 	while (context.nextKey()) {
-	    init();
-	    reduceShm(context.getCurrentKey(), context.getValues(), context);
-	    writeReduceOp(context.getCurrentKey(), context);
+	    reduce(context.getCurrentKey(), context.getValues(), context);
 	}
 	cleanup(context);
     }

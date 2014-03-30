@@ -63,7 +63,7 @@ public class SharedHashCreate {
     private byte[] byteArr = new byte[MAX_LEN];
     private DataInputBuffer buf = new DataInputBuffer();
     
-    private static final Log LOG = LogFactory.getLog(SharedHashMap.class.getName());
+    private static final Log LOG = LogFactory.getLog(SharedHashCreate.class.getName());
     
     private class ShmIterator implements ShmKVIterator {
         private int hashLoc;
@@ -155,7 +155,7 @@ public class SharedHashCreate {
             for (int i = 0; i < valLen; i++) {
                 valp[i] = dma.get(dataLoc + 1 + i);
             }
-Reduce            
+
             buf.reset(valp, 0, valLen);
             return buf;
         }
@@ -198,6 +198,10 @@ Reduce
         public void close() {
 		
         }
+
+	public long getHashVal() {
+	    return 0;
+	}
     }
 
 

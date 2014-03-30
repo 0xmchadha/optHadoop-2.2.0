@@ -191,7 +191,7 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
       MappedByteBuffer shm = null;
       String fileName = file.toString();
 
-      shmrun.numPending.incrementAndGet();
+      //      shmrun.numPending.incrementAndGet();
       try {
 	  shf = new RandomAccessFile(fileName, "r");
 	  shm = shf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, shf.length());
@@ -246,32 +246,29 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 		  }
 
 		  if (closed == true) {
-		      numPending.set(0);
+		      //		      numPending.set(0);
 		      return;
 		  }
 		  
-		  while (shmlist.size() > 0) {
-		      shmList Shm;
-		      synchronized (shmlist) {
-			  Shm = shmlist.get(0);
-			  shmlist.remove(0);
-		      }
-                      shLookups.setNewLookup(Shm.file, Shm.shm);
-		      ((org.apache.hadoop.mapred.ReduceTask)reduceTask).iterate.startProcessing();	
-		      // system.gc();
-		  }
+		  /*
+		    while (shmlist.size() > 0) {
+		    shmList Shm;
+		    synchronized (shmlist) {
+		    Shm = shmlist.get(0);
+		    shmlist.remove(0);
+		    }
+		    shLookups.setNewLookup(Shm.file, Shm.shm);
+		    ((org.apache.hadoop.mapred.ReduceTask)reduceTask).iterate.startProcessing();	
+		    // system.gc();
+		    }
+		  */
 	      } catch (InterruptedException ie) {
-		  numPending.set(0);
+		  //		  numPending.set(0);
 		  return;
 	      } catch(Throwable t) {
-		  numPending.set(0);
+		  //		  numPending.set(0);
 		  reporterExcep.reportException(t);
 		  return;
-	      } finally {
-		  synchronized (numPending) {
-		      numPending.decrementAndGet();
-		      numPending.notifyAll();
-		  }
 	      }
 	  }
       }

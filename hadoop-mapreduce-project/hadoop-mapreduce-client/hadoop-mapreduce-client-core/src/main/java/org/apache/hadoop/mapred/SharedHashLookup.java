@@ -51,7 +51,7 @@ public class SharedHashLookup {
     private static final int MAX_LEN = 64;
     
     /* Total bytes for Progress */
-    private static final Log LOG = LogFactory.getLog(SharedHashMap.class.getName());
+    private static final Log LOG = LogFactory.getLog(SharedHashLookup.class.getName());
     
     MappedByteBuffer shm;
     String fileName;
@@ -63,18 +63,18 @@ public class SharedHashLookup {
         vIter = new iterateValues();
     }
 
+    public static class shmList {
+        public String file;
+        public MappedByteBuffer shm;
+    }
+
     /* this function is synchronized from the above layers */
-    public void setNewLookup(String fileName, MappedByteBuffer shm) {
-        this.shm = shm;
-        this.fileName = fileName;
+    public void setNewLookup(shmList shl) {
+        this.shm = shl.shm;
+        this.fileName = shl.file;
         iterator.newLookup(shm);
     }
     
-    public class shmList {
-        String file;
-        MappedByteBuffer shm;
-    }
-
     private class ShmIterator implements ShmKVIterator {
         private int hashLoc;
         private int dataLoc;
@@ -257,18 +257,19 @@ public class SharedHashLookup {
 
             dataOffset = shm.getLong(0);
             tag = (byte) (hash >>> 56);
-            slot1 = (int) hash & dataOffset;
-            slot2 = (int) (slot1 ^ (tag * 0x5bd1e995)) & dataOffset;
+            slot1 = (int) (hash & dataOffset);
+            slot2 = (int) ((slot1 ^ (tag * 0x5bd1e995)) & dataOffset);
             
             offset = slot1 * slotSize + STARTING_ADDRESS;
 
             for (int i = 0; i < 2; i++) {
                 for (int j = 0; j < numSlots; j++) {
+		    int addr;
                     int loc = offset + j * hashEntryLen;
-                    if (tag == shm.get(loc)) {
-                        if (keyMatches(shm, dataOffset + shm.getInt(loc + 1), key)) {
+                    if (tag == shm.get(loc) && (addr = shm.getInt(loc+1)) != 0) {
+                        if (keyMatches(shm, (int)dataOffset + addr, key)) {
                             this.hashLoc = loc;
-                            this.dataAddress = dataOffset + shm.getInt(loc+1);
+                            this.dataAddress = (int)dataOffset + addr;
                             return true;
                         }
                     }
@@ -304,12 +305,12 @@ public class SharedHashLookup {
 
             dib.reset(valp, 0, valLen);
 
-            DataAddress = shm.getInt(dataAddress + 1 + valLen);
+            dataAddress = shm.getInt(dataAddress + 1 + valLen);
             if (dataAddress != 0)
                 dataAddress += dataOffset;
             else {
                 // make this key as exhausted by writing 0 to dataaddress for the key
-                shm.putInt(loc + 1, 0);
+                shm.putInt((int)hashLoc + 1, 0);
             }
             return dib;
         }

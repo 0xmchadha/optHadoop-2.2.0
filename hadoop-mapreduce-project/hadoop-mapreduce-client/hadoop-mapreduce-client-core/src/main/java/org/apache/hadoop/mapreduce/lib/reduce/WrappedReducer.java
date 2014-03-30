@@ -20,6 +20,7 @@ package org.apache.hadoop.mapreduce.lib.reduce;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -39,6 +40,10 @@ import org.apache.hadoop.mapreduce.ReduceContext;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.security.Credentials;
+
+import org.apache.hadoop.mapred.SharedHashLookup;
+import org.apache.hadoop.mapred.SharedHashLookup.shmList;
+
 
 /**
  * A {@link Reducer} which wraps a given one to allow for custom 
@@ -84,6 +89,17 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
 	public DataInputBuffer getKeyBuf() {
 	return reduceContext.getKeyBuf();
     }
+
+    @Override
+    public void setKey() {
+	reduceContext.setKey();
+    }
+    
+    @Override
+    public void setCombiner() {
+	reduceContext.setCombiner();
+    }
+
     @Override
 	public VALUEIN getCurrentValue() throws IOException, InterruptedException {
 	return reduceContext.getCurrentValue();
@@ -308,10 +324,19 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
     }
     
     @Override
-    public void newIterator() {
+    public void newIterator() throws IOException {
 	reduceContext.newIterator();
     }
     
+    @Override
+    public void newIterator(int hashnum) throws IOException {
+	reduceContext.newIterator(hashnum);
+    }
+    
+    @Override 
+	public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist) {
+	reduceContext.setShl(shl, shmlist);
+    }
     /*    @Override
     public VALUEIN getStoredVal() throws IOException, InterruptedException {
 	return reduceContext.getStoredVal();

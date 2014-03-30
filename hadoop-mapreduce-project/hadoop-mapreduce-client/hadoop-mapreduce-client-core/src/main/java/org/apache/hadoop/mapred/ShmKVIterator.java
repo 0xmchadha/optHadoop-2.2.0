@@ -70,5 +70,5 @@ public interface ShmKVIterator extends RawKeyValueIterator {
   Progress getProgress();
     boolean isNextKeySame();
     boolean start();
-
+    long getHashVal();
 }
