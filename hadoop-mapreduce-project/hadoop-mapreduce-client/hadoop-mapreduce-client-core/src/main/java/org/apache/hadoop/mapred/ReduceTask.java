@@ -369,6 +369,7 @@ public class ReduceTask extends Task {
     /* write mr output */
     //    iterate.writeOutput();
     iterate.runShm();
+
     iterate.cleanup();
 
     if (shuffleConsumerPlugin != null) {
@@ -528,6 +529,8 @@ public class ReduceTask extends Task {
                 }
 		hashnum++;
             }
+
+	    trackedRW.close(reducerContext);
 	}
 
 	public void startProcessing(ArrayList<shmList> shmlist) {

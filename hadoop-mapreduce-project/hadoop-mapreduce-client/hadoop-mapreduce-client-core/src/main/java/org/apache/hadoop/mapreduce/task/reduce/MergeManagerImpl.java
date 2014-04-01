@@ -193,8 +193,8 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 
       //      shmrun.numPending.incrementAndGet();
       try {
-	  shf = new RandomAccessFile(fileName, "r");
-	  shm = shf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, shf.length());
+	  shf = new RandomAccessFile(fileName, "rw");
+	  shm = shf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, shf.length());
 	  shm.load(); 
       } catch (IOException ie) {
 	  

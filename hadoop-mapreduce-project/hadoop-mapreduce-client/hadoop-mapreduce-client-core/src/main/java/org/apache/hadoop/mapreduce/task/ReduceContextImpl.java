@@ -154,7 +154,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   }
   
   public void setKey() {
-      iterator.setKey(nextKey, input.getHashVal());
+      iterator.setKey(currentRawKey.getBytes(), currentRawKey.getLength(), input.getHashVal());
   }
   
   public void setCombiner() {
@@ -228,8 +228,8 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       } else {
 	  nextKeyIsSame = false;
       }
-      inputValueCounter.increment(1);
 
+      inputValueCounter.increment(1);
       return true;
   }
   
@@ -292,10 +292,10 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
 	combiner = true;
     }
 
-    public void setKey(DataInputBuffer key, long random) {
+    public void setKey(byte[] key, int length, long random) {
         state = 0;
         hashmap_num = iterNum;
-        vIter.setKeyBuf(key);
+        vIter.setKey(key, length, random);
     }
 
     @Override
@@ -319,8 +319,14 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
 
                 shmList shlist = shmlist.get(hashmap_num++);
 		vIter.setHashMap(shlist.shm);
-                state = 2;
-            }
+
+		if (vIter.getKey() == false)
+		    continue;
+		else {
+		    state = 2;		    
+		    return true;
+		}
+	    }
             
             if (state == 2) {
                 if (vIter.hasNext() == true) {

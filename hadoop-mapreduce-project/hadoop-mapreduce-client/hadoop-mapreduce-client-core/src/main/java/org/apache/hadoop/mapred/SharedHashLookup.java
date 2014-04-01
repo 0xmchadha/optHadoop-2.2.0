@@ -81,13 +81,15 @@ public class SharedHashLookup {
         private MappedByteBuffer shm;
         private int dataOffset;
         private DataInputBuffer buf;
-        private byte[] byteArr;
+        private byte[] KbyteArr;
+	private byte[] VbyteArr;
         private boolean NextKeySame;
 	private long hashVal;
 
         public ShmIterator() {
             buf = new DataInputBuffer();
-            byteArr = new byte[MAX_LEN];
+            KbyteArr = new byte[MAX_LEN];
+	    VbyteArr = new byte[MAX_LEN];
         }
 
         public void newLookup(MappedByteBuffer shm) {
@@ -151,7 +153,7 @@ public class SharedHashLookup {
             int valLen = (int)WritableUtils.readIntOpt(shm.get(dataLoc));
             byte[] valp;
 		
-            valp = byteArr;
+            valp = VbyteArr;
 
             if (valLen > MAX_LEN) {
                 byte[] nval = new byte[valLen];
@@ -172,7 +174,7 @@ public class SharedHashLookup {
             byte[] keyp;
             int keyLen;
 
-            keyp = byteArr;
+            keyp = KbyteArr;
             dataAdd = shm.getInt(hashLoc + 1);
 
             valLen = (int)WritableUtils.readIntOpt(shm.get(dataOffset + dataAdd));
@@ -187,8 +189,8 @@ public class SharedHashLookup {
             for (int i = 0; i < keyLen; i++) {
                 keyp[i] = shm.get(dataAdd + 1 + i);
             }
-            
-            hashVal = CityHash.cityHash64(keyp, 0, keyLen);
+	    
+	    hashVal = CityHash.cityHash64(keyp, 0, keyLen);
             buf.reset(keyp, 0, keyLen);
             
             return buf;
@@ -233,45 +235,53 @@ public class SharedHashLookup {
     public class iterateValues {
 
         private MappedByteBuffer shm;
-        private DataInputBuffer key;
         private int dataAddress;
+	private DataInputBuffer key = new DataInputBuffer();
         private DataInputBuffer dib = new DataInputBuffer();
         private byte[] byteArr = new byte[MAX_LEN];
         private long dataOffset;
         private long hashLoc;
+	private long hash;
 
         public iterateValues() {
-            
-        }
+	}
         
-        public void setKeyBuf(DataInputBuffer key) {
-            this.key = key;
+        public void setKey(byte[] data, int len, long hash) {
+	    key.reset(data, 0, len);
+	    this.hash = hash;
         }
 
         public void setHashMap(MappedByteBuffer shm) {
             this.shm = shm;
         }
 
-        public boolean getKey(long hash) {
+        public boolean getKey() {
             int tag, slot1, slot2, offset;
+	    long hashMask;
 
             dataOffset = shm.getLong(0);
-            tag = (byte) (hash >>> 56);
-            slot1 = (int) (hash & dataOffset);
-            slot2 = (int) ((slot1 ^ (tag * 0x5bd1e995)) & dataOffset);
-            
-            offset = slot1 * slotSize + STARTING_ADDRESS;
+	    hashMask = (dataOffset/slotSize) - 1;
 
+            tag = (byte) (hash >>> 56);
+            slot1 = (int) (hash & hashMask);
+            slot2 = (int) ((slot1 ^ (tag * 0x5bd1e995)) & hashMask);
+	    offset = slot1 * slotSize + STARTING_ADDRESS;
+	    
+	    byte[] data = key.getData();
+	    int len = key.getLength();
+	    
             for (int i = 0; i < 2; i++) {
                 for (int j = 0; j < numSlots; j++) {
-		    int addr;
-                    int loc = offset + j * hashEntryLen;
+		    int addr, loc;
+                    
+		    loc = offset + j * hashEntryLen;
+
                     if (tag == shm.get(loc) && (addr = shm.getInt(loc+1)) != 0) {
                         if (keyMatches(shm, (int)dataOffset + addr, key)) {
                             this.hashLoc = loc;
                             this.dataAddress = (int)dataOffset + addr;
                             return true;
-                        }
+                        } 
                     }
                 }
                 
@@ -282,7 +292,7 @@ public class SharedHashLookup {
         }
         
         public boolean hasNext() {
-            if (dataAddress == 0)
+            if (dataAddress == 0) 
                 return false;
             
             return true;
@@ -304,7 +314,6 @@ public class SharedHashLookup {
             }
 
             dib.reset(valp, 0, valLen);
-
             dataAddress = shm.getInt(dataAddress + 1 + valLen);
             if (dataAddress != 0)
                 dataAddress += dataOffset;
@@ -323,7 +332,6 @@ public class SharedHashLookup {
     public iterateValues getVIter() {
         return vIter;
     }
-
 }
 
 
