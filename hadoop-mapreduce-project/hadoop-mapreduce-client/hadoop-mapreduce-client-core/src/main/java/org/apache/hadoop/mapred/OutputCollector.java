@@ -43,4 +43,5 @@ public interface OutputCollector<K, V> {
    * @throws IOException
    */
   void collect(K key, V value) throws IOException;
+  void setWriter(int num);
 }

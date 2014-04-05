@@ -336,7 +336,6 @@ public class ReduceTask extends Task {
       isLocal = true;
     }
     
-
     if (!isLocal) {
       Class combinerClass = conf.getCombinerClass();
       CombineOutputCollector combineCollector = 
@@ -362,6 +361,7 @@ public class ReduceTask extends Task {
       shuffleConsumerPlugin.init(shuffleContext);
       shuffleConsumerPlugin.run();
     }
+    
     sortPhase.complete();                         // sort is complete
     setPhase(TaskStatus.Phase.REDUCE); 
     statusUpdate(umbilical);
@@ -369,7 +369,6 @@ public class ReduceTask extends Task {
     /* write mr output */
     //    iterate.writeOutput();
     iterate.runShm();
-
     iterate.cleanup();
 
     if (shuffleConsumerPlugin != null) {

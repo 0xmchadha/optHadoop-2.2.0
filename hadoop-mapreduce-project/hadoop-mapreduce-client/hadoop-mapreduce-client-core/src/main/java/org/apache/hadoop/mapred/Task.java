@@ -53,6 +53,7 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.mapred.IFile.shmWriter;
+import org.apache.hadoop.mapred.IFile.shmWriter.DeserializedContext;
 import org.apache.hadoop.mapreduce.FileSystemCounter;
 import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.TaskCounter;
@@ -70,6 +71,7 @@ import org.apache.hadoop.util.StringInterner;
 import org.apache.hadoop.util.StringUtils;
 
 import org.apache.hadoop.mapred.SharedHashCreate;
+
 /**
  * Base class for tasks.
  */
@@ -1287,7 +1289,6 @@ abstract public class Task implements Writable, Configurable {
     private Progressable progressable;
     private long progressBar;
     
-    
     public CombineOutputCollector(Counters.Counter outCounter, Progressable progressable, Configuration conf, shmWriter shmWriter) {
       this.outCounter = outCounter;
       this.progressable=progressable;
@@ -1475,7 +1476,34 @@ abstract public class Task implements Writable, Configurable {
 
     return reducerContext;
   }
+    
+    @SuppressWarnings("unchecked")
+	protected static <INKEY,INVALUE,OUTKEY,OUTVALUE> 
+      org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>.Context
+      createDeserializedContext(shmWriter<INKEY,INVALUE> shm, Configuration job,
+				org.apache.hadoop.mapreduce.TaskAttemptID taskId,
+				org.apache.hadoop.mapreduce.RecordWriter<OUTKEY,OUTVALUE> output, 
+				org.apache.hadoop.mapreduce.OutputCommitter committer,
+				org.apache.hadoop.mapreduce.StatusReporter reporter, org.apache.hadoop.mapreduce.Counter inputKeyCounter,
+				org.apache.hadoop.mapreduce.Counter inputValueCounter) throws IOException, InterruptedException {
+	org.apache.hadoop.mapreduce.ReduceContext<INKEY, INVALUE, OUTKEY, OUTVALUE> 
+	    reduceContext = 
+	    shm.new DeserializedContext<INKEY, INVALUE, OUTKEY, OUTVALUE>(job, taskId, 
+								      output, 
+								      committer, 
+								      reporter, 
+								      inputKeyCounter, 
+								      inputValueCounter);
+	
+	org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>.Context 
+	    reducerContext = 
+	    new WrappedReducer<INKEY, INVALUE, OUTKEY, OUTVALUE>().getReducerContext(
+										     reduceContext);
+	
+	return reducerContext;
+    }
 
+    
   @InterfaceAudience.LimitedPrivate({"MapReduce"})
   @InterfaceStability.Unstable
   public static abstract class CombinerRunner<K,V> {
@@ -1496,10 +1524,14 @@ abstract public class Task implements Writable, Configurable {
      * @param iterator the key/value pairs to use as input
      * @param collector the output collector
      */
-    public abstract void combine(ShmKVIterator iterator, 
-                          OutputCollector<K,V> collector
-                         ) throws IOException, InterruptedException, 
-                                  ClassNotFoundException;
+    public void combine(ShmKVIterator iterator, 
+			OutputCollector<K,V> collector
+			) throws IOException, InterruptedException, 
+	ClassNotFoundException {
+    }
+
+    public void combine(shmWriter shm, OutputCollector<K, V> collector) throws IOException, InterruptedException, ClassNotFoundException {
+    }
 
     @SuppressWarnings("unchecked")
     public static <K,V> 
@@ -1607,7 +1639,11 @@ abstract public class Task implements Writable, Configurable {
       OutputConverter(OutputCollector<K,V> output) {
         this.output = output;
       }
-
+      
+      @Override
+	  public void setWriter(int num) {
+	  output.setWriter(num);
+      }
       @Override
       public void close(org.apache.hadoop.mapreduce.TaskAttemptContext context){
       }
@@ -1620,29 +1656,26 @@ abstract public class Task implements Writable, Configurable {
     }
     
     @SuppressWarnings("unchecked")
-    @Override
-    public void combine(ShmKVIterator iterator, 
-                 OutputCollector<K,V> collector
-                 ) throws IOException, InterruptedException,
-                          ClassNotFoundException {
+	@Override
+	public void combine(shmWriter shm, OutputCollector<K,V> collector
+			    ) throws IOException, InterruptedException,
+	ClassNotFoundException {
       // make a reducer
       org.apache.hadoop.mapreduce.Reducer<K,V,K,V> reducer =
         (org.apache.hadoop.mapreduce.Reducer<K,V,K,V>)
           ReflectionUtils.newInstance(reducerClass, job);
       org.apache.hadoop.mapreduce.Reducer.Context 
-           reducerContext = createReduceContext(reducer, job, taskId,
-                                                iterator, null, inputCounter, 
-                                                new OutputConverter(collector),
-                                                committer,
-                                                reporter, keyClass,
-                                                valueClass);
-      reducerContext.newIterator();
-      reducerContext.setCombiner();
+	  reducerContext = createDeserializedContext(shm, job, taskId,
+						     new OutputConverter(collector),
+						     committer,
+						     reporter, inputCounter, null);
+      //      reducerContext.newIterator();
+      //      reducerContext.setCombiner();
       reducer.runShm(reducerContext);
     } 
   }
-
-  BytesWritable getExtraData() {
+    
+    BytesWritable getExtraData() {
     return extraData;
   }
 

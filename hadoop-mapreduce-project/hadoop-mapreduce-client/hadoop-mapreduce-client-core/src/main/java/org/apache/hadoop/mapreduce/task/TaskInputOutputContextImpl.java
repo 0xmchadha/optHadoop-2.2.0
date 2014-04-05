@@ -56,6 +56,10 @@ public abstract class TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     this.committer = committer;
   }
 
+  public void setHashMap(int num) {
+      output.setWriter(num);
+  }
+
   /**
    * Advance to the next key, value pair, returning null if at end.
    * @return the key object that was read into, or null if no more

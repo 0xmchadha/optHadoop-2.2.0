@@ -336,6 +336,9 @@ class Chain extends org.apache.hadoop.mapreduce.lib.chain.Chain {
       this.output = output;
       this.reporter = reporter;
     }
+    
+    public void setWriter(int num) {
+    }
 
     @SuppressWarnings({"unchecked"})
     public void collect(K key, V value) throws IOException {

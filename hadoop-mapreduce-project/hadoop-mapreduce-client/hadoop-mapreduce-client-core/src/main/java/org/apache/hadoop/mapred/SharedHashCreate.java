@@ -275,8 +275,7 @@ public class SharedHashCreate {
 	    if (reboot == false) {
 		slot1 = slot;
 		this.tag = tag;
-	    }
-	    else {
+	    } else {
 		int valLen = (int)WritableUtils.readIntOpt(mbf.get(valOff));
 		int keyOff = valOff + 1 + valLen + 4;
 		int keyLen = (int)WritableUtils.readIntOpt(mbf.get(keyOff));
@@ -353,6 +352,7 @@ public class SharedHashCreate {
         
         hma = hmf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, hash_size);
         dma = dmf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, dataSize);
+
         this.hma.add(hashmap_num, hma);
         this.dma.add(hashmap_num, dma);
         this.hmf.add(hashmap_num, hmf);
@@ -708,7 +708,7 @@ public class SharedHashCreate {
     
     public int getOffset(int hashmap_num) {
         return getAvailableAddress(this.dma.get(hashmap_num));
-     }
+    }
 
     public MappedByteBuffer getMappedByteBuf(int hashmap_num) {
         return this.dma.get(hashmap_num);

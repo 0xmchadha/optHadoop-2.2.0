@@ -99,7 +99,9 @@ class PipesReducer<K2 extends WritableComparable, V2 extends Writable,
   public void close() throws IOException {
     // if we haven't started the application, we have nothing to do
     if (isOk) {
-      OutputCollector<K3, V3> nullCollector = new OutputCollector<K3, V3>() {
+	OutputCollector<K3, V3> nullCollector = new OutputCollector<K3, V3>() {
+	    public void setWriter(int num) {
+	    }
         public void collect(K3 key, 
                             V3 value) throws IOException {
           // NULL

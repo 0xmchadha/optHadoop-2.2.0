@@ -968,6 +968,8 @@ public class JHLogAnalyzer {
   }
 
   private static class LoggingCollector implements OutputCollector<Text, Text> {
+      public void setWriter(int num) {
+      }
     public void collect(Text key, Text value) throws IOException {
       LOG.info(key + " == " + value);
     }
