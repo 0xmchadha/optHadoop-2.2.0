@@ -59,7 +59,7 @@ import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.mapreduce.task.TaskInputOutputContextImpl;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.mapred.SharedHashLookup.shmList;
+
 /**
  * <code>IFile</code> is the simple <key-len, value-len, key, value> format
  * for the intermediate map-outputs in Map-Reduce.
@@ -111,9 +111,6 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 
 		public boolean nextKeyValue() {
 		    return false;
-		}
-		
-		public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist) {
 		}
 		
 		public void setCombiner() {
@@ -358,7 +355,8 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 		int bytes_written;
 		MappedByteBuffer mbf;
 		int valOff, valLen, keyOff, keyLen;
-	
+		byte mc_b;
+
 		if (key.getClass() != keyClass)
 		    throw new IOException("wrong key class: "+ key.getClass()
 					  +" is not "+ keyClass);
@@ -379,7 +377,7 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 		    //		throw new IOException("key value size not in limit");
 		    // error
 		}
-	    
+
 		mc_b = WritableUtils.writeIntOpt(bytes_written);
 		mbf.put(get_offset, mc_b);
                 get_offset += (1 + bytes_written);
@@ -393,7 +391,6 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 		    throw new IOException("key value size not in limit");
 		}
 
-		byte mc_b;
 		mc_b = WritableUtils.writeIntOpt(bytes_written);
 		mbf.put(get_offset, mc_b);
 		get_offset += (1 + bytes_written);

@@ -706,7 +706,7 @@ public class SharedHashCreate {
         return getAvailableAddress(this.dma.get(hashmap_num));
     }
 
-    public int setOffset(int hashmap_num, int val) {
+    public void setOffset(int hashmap_num, int val) {
         setAvailableAddress(this.dma.get(hashmap_num), val);
     }
 

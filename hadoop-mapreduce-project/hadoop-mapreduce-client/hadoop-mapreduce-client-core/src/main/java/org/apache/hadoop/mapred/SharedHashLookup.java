@@ -89,9 +89,9 @@ public class SharedHashLookup {
             int dataAdd;
             int keyLen;
             
-            hashLoc = STARTING_ADDRESS;
-            dataOffset = (int) shm.getLong(0);
-            if (dataOffset != STARTING_ADDRESS) {
+	    dataOffset = (int) shm.getLong(0);
+            
+	    if (dataOffset != STARTING_ADDRESS) {
                 String a = null;
                 if (a.equals("hello")) {
                     LOG.info("hello");

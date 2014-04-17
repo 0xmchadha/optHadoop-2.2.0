@@ -971,6 +971,9 @@ public class JHLogAnalyzer {
     public void collect(Text key, Text value) throws IOException {
       LOG.info(key + " == " + value);
     }
+
+    public void setWriter(int num) {
+    }
   }
 
   /**

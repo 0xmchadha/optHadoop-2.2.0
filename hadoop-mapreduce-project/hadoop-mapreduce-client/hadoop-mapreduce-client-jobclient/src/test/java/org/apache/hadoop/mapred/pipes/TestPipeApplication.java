@@ -552,6 +552,10 @@ public class TestPipeApplication {
       this.progressable = progressable;
     }
 
+    public synchronized void setWriter(int num) {
+	    
+	}
+    
     public synchronized void setWriter(Writer<K, V> writer) {
       this.writer = writer;
     }
