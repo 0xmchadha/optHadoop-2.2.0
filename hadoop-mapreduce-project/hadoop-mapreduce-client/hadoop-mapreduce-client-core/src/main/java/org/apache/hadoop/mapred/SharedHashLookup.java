@@ -63,14 +63,14 @@ public class SharedHashLookup {
     public void setNewLookup(String fileName, MappedByteBuffer shm) {
         this.shm = shm;
         this.fileName = fileName;
+
         iterator.newLookup(shm);
     }
 
     private class ShmIterator implements ShmKVIterator {
-        private int hashLoc;
-        private int dataLoc;
-        private MappedByteBuffer shm;
+        private int lastAdd;
         private int dataOffset;
+        private MappedByteBuffer shm;
         private DataInputBuffer buf;
         private byte[] byteArr;
         private boolean NextKeySame;
@@ -91,54 +91,31 @@ public class SharedHashLookup {
             
             hashLoc = STARTING_ADDRESS;
             dataOffset = (int) shm.getLong(0);
-
-            while(true) {
-                dataAdd = shm.getInt(hashLoc + 1);
-                if (dataAdd == 0) {
-                    hashLoc += hashEntryLen;
-                    if (hashLoc >= dataOffset)
-                        return false;
-			
-                    continue;
+            if (dataOffset != STARTING_ADDRESS) {
+                String a = null;
+                if (a.equals("hello")) {
+                    LOG.info("hello");
                 }
-
-                dataLoc = dataOffset + dataAdd;
-                return true;
             }
+                                            
+            lastAdd = (int)shm.getLong(STARTING_ADDRESS);
+            dataOffset += STARTING_ADDRESS;
+            
+            if (dataOffset >= lastAdd)
+                return false;
+
+            return true;
         }
 	    
         public boolean next() throws IOException {
-            NextKeySame = true;
-
-            if (hashLoc < dataOffset) {
-                int nDataAdd;
-                int valLen;
-                int keyLen; 
-		   
-                valLen = (int)WritableUtils.readIntOpt(shm.get(dataLoc));
-                nDataAdd = shm.getInt(dataLoc + 1 + valLen); //next dataAddress
-                if (nDataAdd == 0) {
-                    NextKeySame = false;
-                    while(true) {
-                        hashLoc += hashEntryLen;
-                        if (hashLoc >= dataOffset)
-                            return false;
-                        if ((nDataAdd = shm.getInt(hashLoc + 1)) == 0)
-                            continue;
-
-                        dataLoc = dataOffset + nDataAdd;
-                        break;
-                    }
-                } else {
-                    dataLoc = dataOffset + nDataAdd;
-                }
+            if (dataOffset < lastAdd) 
                 return true;
-            }
+
             return false;
         }
 
         public DataInputBuffer getValue() {
-            int valLen = (int)WritableUtils.readIntOpt(shm.get(dataLoc));
+            int valLen = (int)WritableUtils.readIntOpt(shm.get(dataOffset));
             byte[] valp;
 		
             valp = byteArr;
@@ -149,25 +126,21 @@ public class SharedHashLookup {
             }
 		
             for (int i = 0; i < valLen; i++) {
-                valp[i] = shm.get(dataLoc + 1 + i);
+                valp[i] = shm.get(dataOffset + 1 + i);
             }
-
+            
+            dataOffset += (1+valLen);
             buf.reset(valp, 0, valLen);
             return buf;
         }
 
         public DataInputBuffer getKey() {
-            int valLen;
             int dataAdd;
             byte[] keyp;
             int keyLen;
 
             keyp = byteArr;
-            dataAdd = shm.getInt(hashLoc + 1);
-
-            valLen = (int)WritableUtils.readIntOpt(shm.get(dataOffset + dataAdd));
-            dataAdd += (dataOffset + 1 + valLen + INTLENGTH);
-            keyLen = (int)WritableUtils.readIntOpt(shm.get(dataAdd));
+            keyLen = (int)WritableUtils.readIntOpt(shm.get(dataOffset));
 
             if (keyLen > MAX_LEN) {
                 byte[] nKey = new byte[keyLen];
@@ -175,20 +148,22 @@ public class SharedHashLookup {
             }
 
             for (int i = 0; i < keyLen; i++) {
-                keyp[i] = shm.get(dataAdd + 1 + i);
+                keyp[i] = shm.get(dataOffset + 1 + i);
             }
 
+            dataOffset += (1+keyLen);
             buf.reset(keyp, 0, keyLen);
             return buf;
         }
 	    
         public boolean isNextKeySame() {
-            return NextKeySame;
+            return false;
         }
 	    
         public Progress getProgress() {
             return null;
         }
+
         public void close() {
                 
         }

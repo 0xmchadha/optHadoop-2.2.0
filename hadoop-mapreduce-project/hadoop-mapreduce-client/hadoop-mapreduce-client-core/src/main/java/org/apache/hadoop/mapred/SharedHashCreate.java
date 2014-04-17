@@ -704,7 +704,11 @@ public class SharedHashCreate {
     
     public int getOffset(int hashmap_num) {
         return getAvailableAddress(this.dma.get(hashmap_num));
-     }
+    }
+
+    public int setOffset(int hashmap_num, int val) {
+        setAvailableAddress(this.dma.get(hashmap_num), val);
+    }
 
     public MappedByteBuffer getMappedByteBuf(int hashmap_num) {
         return this.dma.get(hashmap_num);

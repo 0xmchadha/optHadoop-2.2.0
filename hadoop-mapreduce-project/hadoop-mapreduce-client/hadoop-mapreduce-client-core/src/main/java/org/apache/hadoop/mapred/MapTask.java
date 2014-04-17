@@ -579,6 +579,9 @@ public class MapTask extends Task {
       }
       this.collector = collector;
     }
+    
+    public void setWriter(int num) {
+    }
 
     @Override
     public void collect(K key, V value) throws IOException {
@@ -875,6 +878,7 @@ public class MapTask extends Task {
     private Progress sortPhase;
     private Counters.Counter spilledRecordsCounter;
     private IFile.shmWriter<K, V> globalWriter;
+    private int hashIndex;
 
     public MapOutputBuffer() {
     }
@@ -931,6 +935,10 @@ public class MapTask extends Task {
         final Counters.Counter combineOutputCounter =
           reporter.getCounter(TaskCounter.COMBINE_OUTPUT_RECORDS);
         combineCollector= new CombineOutputCollector<K,V>(combineOutputCounter, reporter, job, globalWriter);
+	/* -1 because we do not know the partition number */
+	//	hashIndex = globalWriter.newReducer(-1, file, hashSize, 0);
+	spillFile = mapOutputFile.getSpillFileForWrite(partitions);
+	hashIndex = globalWriter.newReducer(-1, spillFile, -1, 0);
       } else {
         combineCollector = null;
       }
@@ -954,18 +962,22 @@ public class MapTask extends Task {
 				      + valClass.getName() + ", received "
 				      + value.getClass().getName());
 	    }
+
 	    if (partition < 0 || partition >= partitions) {
 		throw new IOException("Illegal partition for " + key + " (" +
 				      partition + ")");
 	    }
             
-            globalWriter.append(key, value, partition);
+	    if (combinerRunner != null) 
+		globalWriter.append(key, value, partition, hashIndex);
+	    else
+		globalWriter.append(key, value, partition);
 	}
     
     private TaskAttemptID getTaskID() {
-      return mapTask.getTaskID();
+	return mapTask.getTaskID();
     }
-
+    
     public void flush() throws IOException, ClassNotFoundException,
 	InterruptedException {
 	reporter.progress();
@@ -978,20 +990,22 @@ public class MapTask extends Task {
         ShmKVIterator iterator;
 
 	if (combinerRunner != null) {
+	    combinerRunner.combine(globalWriter, combineCollector);
+	    /*
             iterator = globalWriter.getIterator();
+
 	    for (int i = 0; i < partitions; i++) {
 		long hashSize = globalWriter.getHashSize(i);
-
 		globalWriter.rename(i);
 		spillFile = mapOutputFile.getSpillFileForWrite(i);
-                /* -1 because we do not know our partition number */
+		
 		writer_num = globalWriter.newReducer(-1, spillFile, (int)hashSize, 0);
 		combineCollector.setWriter(writer_num);
                 globalWriter.setIterator(i);
 		combinerRunner.combine(iterator, combineCollector);
                 globalWriter.replaceWriter(i, writer_num);
-                //		System.gc();
 	    }
+	    */
 	}
 	
 	globalWriter.close_static();
