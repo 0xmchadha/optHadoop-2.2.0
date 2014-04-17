@@ -514,7 +514,9 @@ public class MultipleOutputs {
       getRecordWriter(namedOutput, baseFileName, reporter);
 
     return new OutputCollector() {
-
+	
+	public void setWriter(int num) {
+	}
       @SuppressWarnings({"unchecked"})
       public void collect(Object key, Object value) throws IOException {
         writer.write(key, value);

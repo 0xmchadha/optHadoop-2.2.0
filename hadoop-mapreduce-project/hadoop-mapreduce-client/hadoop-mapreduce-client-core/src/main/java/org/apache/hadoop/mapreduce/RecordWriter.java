@@ -43,6 +43,9 @@ public abstract class RecordWriter<K, V> {
    * @param value the value to write.
    * @throws IOException
    */      
+    public void setWriter(int num) {
+    }
+    
   public abstract void write(K key, V value
                              ) throws IOException, InterruptedException;
 
