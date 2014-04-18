@@ -1,147 +1,155 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-package org.apache.hadoop.mapred;
+ /**
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+  * regarding copyright ownership.  The ASF licenses this file
+  * to you under the Apache License, Version 2.0 (the
+  * "License"); you may not use this file except in compliance
+  * with the License.  You may obtain a copy of the License at
+  *
+  *     http://www.apache.org/licenses/LICENSE-2.0
+  *
+  * Unless required by applicable law or agreed to in writing, software
+  * distributed under the License is distributed on an "AS IS" BASIS,
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  */
+ package org.apache.hadoop.mapred;
 
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.MappedByteBuffer;
-import java.util.ArrayList;
-import java.util.Iterator;
+ import java.io.DataInput;
+ import java.io.DataInputStream;
+ import java.io.DataOutputStream;
+ import java.io.EOFException;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.nio.MappedByteBuffer;
+ import java.util.ArrayList;
+ import java.util.Iterator;
 
-import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.classification.InterfaceStability;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.DataInputBuffer;
-import org.apache.hadoop.io.DataOutputBuffer;
-import org.apache.hadoop.io.MappedDataOutputBuffer;
-import org.apache.hadoop.io.IOUtils;
-import org.apache.hadoop.io.WritableUtils;
-import org.apache.hadoop.io.compress.CodecPool;
-import org.apache.hadoop.io.compress.CompressionCodec;
-import org.apache.hadoop.io.compress.CompressionOutputStream;
-import org.apache.hadoop.io.compress.Compressor;
-import org.apache.hadoop.io.compress.Decompressor;
-import org.apache.hadoop.io.serializer.SerializationFactory;
-import org.apache.hadoop.io.serializer.Serializer;
+ import org.apache.hadoop.classification.InterfaceAudience;
+ import org.apache.hadoop.classification.InterfaceStability;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.DataInputBuffer;
+ import org.apache.hadoop.io.DataOutputBuffer;
+ import org.apache.hadoop.io.MappedDataOutputBuffer;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.io.WritableUtils;
+ import org.apache.hadoop.io.compress.CodecPool;
+ import org.apache.hadoop.io.compress.CompressionCodec;
+ import org.apache.hadoop.io.compress.CompressionOutputStream;
+ import org.apache.hadoop.io.compress.Compressor;
+ import org.apache.hadoop.io.compress.Decompressor;
+ import org.apache.hadoop.io.serializer.SerializationFactory;
+ import org.apache.hadoop.io.serializer.Serializer;
 
-import org.apache.hadoop.mapred.SharedHashCreate;
-import org.apache.hadoop.mapreduce.Counter;
-import org.apache.hadoop.mapreduce.OutputCommitter;
-import org.apache.hadoop.mapreduce.RecordWriter;
-import org.apache.hadoop.mapreduce.ReduceContext;
-import org.apache.hadoop.mapreduce.StatusReporter;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
-import org.apache.hadoop.util.Progressable;
+ import org.apache.hadoop.mapred.SharedHashCreate;
+ import org.apache.hadoop.mapreduce.Counter;
+ import org.apache.hadoop.mapreduce.OutputCommitter;
+ import org.apache.hadoop.mapreduce.RecordWriter;
+ import org.apache.hadoop.mapreduce.ReduceContext;
+ import org.apache.hadoop.mapreduce.StatusReporter;
+ import org.apache.hadoop.mapreduce.TaskAttemptID;
+ import org.apache.hadoop.util.Progressable;
 
-import org.apache.hadoop.mapreduce.task.TaskInputOutputContextImpl;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.mapred.SharedHashLookup.shmList;
-/**
- * <code>IFile</code> is the simple <key-len, value-len, key, value> format
- * for the intermediate map-outputs in Map-Reduce.
- *
- * There is a <code>Writer</code> to write out map-outputs in this format and 
- * a <code>Reader</code> to read files of this format.
- */
-@InterfaceAudience.Private
-    @InterfaceStability.Unstable
-    public class IFile {
-	private static final Log LOG = LogFactory.getLog(IFile.class);
-	public static final int EOF_MARKER = -1; // End of File Marker
-     
-	public static class shmWriter<K extends Object, V extends Object> {
+ import org.apache.hadoop.mapreduce.task.TaskInputOutputContextImpl;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
+ /**
+  * <code>IFile</code> is the simple <key-len, value-len, key, value> format
+  * for the intermediate map-outputs in Map-Reduce.
+  *
+  * There is a <code>Writer</code> to write out map-outputs in this format and 
+  * a <code>Reader</code> to read files of this format.
+  */
+ @InterfaceAudience.Private
+     @InterfaceStability.Unstable
+     public class IFile {
+	 private static final Log LOG = LogFactory.getLog(IFile.class);
+	 public static final int EOF_MARKER = -1; // End of File Marker
 
-	    public class compKey
-	    {
-		K key;
-		int part;
+	 public static class shmWriter<K extends Object, V extends Object> {
 
-		public compKey(K key, int partition) {
-		    this.key = key;
-		    this.part = partition;
-		}
-	    }
-    
-	    Class<K> keyClass;
-	    Class<V> valueClass;
-	    Serializer<K> keySerializer;
-	    Serializer<K> keySerializer2;
-	    Serializer<V> valueSerializer;
-	    ArrayList<compKey> kA;
-	    ArrayList<ArrayList<V>> vA;
-	 
-	    public class DeserializedContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
-		extends TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT> implements ReduceContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
-		private Counter inputValueCounter;
-		private Counter inputKeyCounter;
-		private ValueIterable iterable = new ValueIterable();
-		private int i;
 
-		public DeserializedContext(Configuration conf, TaskAttemptID taskid, RecordWriter<KEYOUT, VALUEOUT> output, OutputCommitter committer, StatusReporter reporter, Counter inputKeyCounter, Counter inputValueCounter) {
-		    super(conf, taskid, output, committer, reporter);
+	     public class kvHolder
+	     {
+		 ArrayList<K> kA;
+		 ArrayList<ArrayList<V>> vA;
+		 int arrIndex;
+	     }
 
-		    this.inputKeyCounter = inputKeyCounter;
-		    this.inputValueCounter = inputValueCounter;
-		    i = -1;
-		}
+	     Class<K> keyClass;
+	     Class<V> valueClass;
+	     Serializer<K> keySerializer;
+	     Serializer<K> keySerializer2;
+	     Serializer<V> valueSerializer;
+	     ArrayList<kvHolder> hold;
+		 //	    ArrayList<ArrayList<K>> kA;
+		 //	    ArrayList<ArrayList<V>> vA;
 
-		public boolean nextKeyValue() {
-		    return false;
-		}
-		
-		public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist) {
-		}
-		
-		public void setCombiner() {
-		}
-		
-		public DataInputBuffer getKeyBuf() {
-		    return null;
-		}
-		
-		public KEYIN deserializedKey(DataInputBuffer key) throws IOException, InterruptedException {
-		    return null;
-		}
+	     public class DeserializedContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+		 extends TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT> implements ReduceContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
+		 private Counter inputValueCounter;
+		 private Counter inputKeyCounter;
+		 private ValueIterable iterable = new ValueIterable();
+		 private int partNum;
+		 private int i;
 
-		public boolean nextKey() throws IOException, InterruptedException {
-		    // set hashmap_num
-		    i++;
-		    if (i == kA.size())
-			return false;
+		 public DeserializedContext(Configuration conf, TaskAttemptID taskid, RecordWriter<KEYOUT, VALUEOUT> output, OutputCommitter committer, StatusReporter reporter, Counter inputKeyCounter, Counter inputValueCounter) {
+		     super(conf, taskid, output, committer, reporter);
 
-		    setHashMap(kA.get(i).part);
-		    return true;
-		}
+		     this.inputKeyCounter = inputKeyCounter;
+		     this.inputValueCounter = inputValueCounter;
+		     i = -1;
+		 }
+
+		 public boolean nextKeyValue() {
+		     return false;
+		 }
+
+		 public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist) {
+		 }
+
+		 public void setCombiner() {
+		 }
+
+		 public DataInputBuffer getKeyBuf() {
+		     return null;
+		 }
+
+		 public KEYIN deserializedKey(DataInputBuffer key) throws IOException, InterruptedException {
+		     return null;
+		 }
+		 
+		 public boolean nextKey() throws IOException, InterruptedException {
+
+		      if (partNum == hold.size())
+			  return false;
+
+		      i++;
+
+		      if (i == 0) 
+			  setHashMap(partNum);
+		      
+		      if (hold.get(partNum).kA.size() == i) {
+			  partNum++;
+			  i = -1;
+			  return nexyKey();
+		      }
+		      
+		      return true;
+		 }
 	     
 		public void setKey() {
 		}
 
 		public KEYIN getCurrentKey() {
-		    return (KEYIN)kA.get(i).key;
+		    return (KEYIN)hold.get(partNum).kA.get(i);
 		}
 		
 		public void newIterator() {
@@ -164,7 +172,7 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 		    public boolean hasNext() {
 			j++;
 			
-			if (j == vA.get(i).size()) {
+			if (j == hold.get(partNum).vA.get(i).size()) {
 			    j = -1;
 			    return false;
 			}
@@ -173,7 +181,7 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 		    }
 		 
 		    public VALUEIN next() {
-			return (VALUEIN)vA.get(i).get(j);
+			return (VALUEIN)hold.get(partNum).vA.get(i).get(j);
 		    }
 
 		    public void remove() {
@@ -200,7 +208,6 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 	    private SharedHashCreate shms;
 	    private int pred_uniq_keys;
 	    DataInputBuffer dib;
-	    int arrIndex = 0;
 
 	    public shmWriter(Configuration conf, 
 			     int partitions, 
@@ -212,6 +219,8 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 		int check;
 		float avg_col;
 		JobConf job = (JobConf)conf;
+		kvHolder h;
+		
 		this.keyClass = keyClass;
 		this.valueClass = valueClass;
 		SerializationFactory serializationFactory = new SerializationFactory(conf);
@@ -221,8 +230,15 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 		kvbuf2 = new DataOutputBuffer();
 		kvbuf = new MappedDataOutputBuffer();
 		dib = new DataInputBuffer();
-		kA = new ArrayList<compKey>();
-		vA = new ArrayList<ArrayList<V>>();
+		//		kA = new ArrayList<ArrayList<K>>();
+		//		vA = new ArrayList<ArrayList<V>>();
+		hold = new ArrayList<kvHolder>(partitions);
+
+		for (int i = 0; i < partitions; i++) {
+		    h = hold.get(i);
+		    h.kA = new ArrayList<K>();
+		    h.vA = new ArrayList<V>();
+		}
 
 		this.keySerializer.open(kvbuf);
 		this.keySerializer2.open(kvbuf2);
@@ -243,13 +259,13 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
              
 		shms = new SharedHashCreate(partitions);
 	    }
-    
+	    
 	    public void close_static() throws IOException {
 		// Close the serializers
 		keySerializer.close();
 		keySerializer2.close();
 		valueSerializer.close();
-
+		
 		if(writtenRecordsCounter != null) {
 		    writtenRecordsCounter.increment(numRecordsWritten);
 		}
@@ -313,7 +329,6 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 
 		return off+1;
 	    }
-
 	 
 	    public void append(K key, V value, int keyPart, int hashPart ) throws IOException {
 		MappedByteBuffer mbf;
@@ -336,20 +351,21 @@ import org.apache.hadoop.mapred.SharedHashLookup.shmList;
 		index = getIndex(shms.get(hashPart, dib));
 	     
 		if (index == -1) {
-		    compKey c = new compKey(key, keyPart);
-		    kA.add(arrIndex, c);
+		    //   compKey c = new compKey(key, keyPart);
+		    int arrIndex = hold.get(keyPart).arrIndex;
+		    hold.get(keyPart).kA.add(arrIndex, key);
+		    //		    kA.get(keyPart).add(arrIndex, c);
 		    offset = shms.getOffset(hashPart);
-					
 		    valOff = writeShm(mbf, offset, arrIndex);
 		    keyOff = writeShm(mbf, offset + 9, dib);
 		    shms.put(hashPart, valOff, 4, keyOff, dib.getLength());
 		    index = arrIndex;
 		    ArrayList<V> v = new ArrayList();
-		    vA.add(index, v);
-		    arrIndex++;
+		    hold.get(keyPart).vA.add(index, v);
+		    hold.get(keyPart).arrIndex++;
 		}
 
-		vA.get(index).add(value);
+		hold.get(keyPart).vA.get(index).add(value);
 		kvbuf2.reset();
 	    }
 
