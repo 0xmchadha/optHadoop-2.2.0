@@ -139,7 +139,7 @@
 		      if (hold.get(partNum).kA.size() == i) {
 			  partNum++;
 			  i = -1;
-			  return nexyKey();
+			  return nextKey();
 		      }
 		      
 		      return true;
@@ -237,7 +237,7 @@
 		for (int i = 0; i < partitions; i++) {
 		    h = hold.get(i);
 		    h.kA = new ArrayList<K>();
-		    h.vA = new ArrayList<V>();
+		    h.vA = new ArrayList<ArrayList<V>>();
 		}
 
 		this.keySerializer.open(kvbuf);
