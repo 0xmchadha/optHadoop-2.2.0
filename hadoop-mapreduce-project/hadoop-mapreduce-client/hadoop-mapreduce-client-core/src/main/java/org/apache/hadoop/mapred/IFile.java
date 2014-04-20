@@ -74,31 +74,27 @@ import org.apache.commons.logging.LogFactory;
 	public static final int EOF_MARKER = -1; // End of File Marker
      
 	public static class shmWriter<K extends Object, V extends Object> {
-
-	    public class compKey
-	    {
-		K key;
-		int part;
-
-		public compKey(K key, int partition) {
-		    this.key = key;
-		    this.part = partition;
-		}
-	    }
-    
+	    
+	     public class kvHolder
+	     {
+		 ArrayList<K> kA;
+		 ArrayList<ArrayList<V>> vA;
+		 int arrIndex;
+	     }
+	     
 	    Class<K> keyClass;
 	    Class<V> valueClass;
 	    Serializer<K> keySerializer;
 	    Serializer<K> keySerializer2;
 	    Serializer<V> valueSerializer;
-	    ArrayList<compKey> kA;
-	    ArrayList<ArrayList<V>> vA;
-	 
+	    ArrayList<kvHolder> hold;
+
 	    public class DeserializedContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
 		extends TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT> implements ReduceContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
 		private Counter inputValueCounter;
 		private Counter inputKeyCounter;
 		private ValueIterable iterable = new ValueIterable();
+		private int partNum;
 		private int i;
 
 		public DeserializedContext(Configuration conf, TaskAttemptID taskid, RecordWriter<KEYOUT, VALUEOUT> output, OutputCommitter committer, StatusReporter reporter, Counter inputKeyCounter, Counter inputValueCounter) {
@@ -123,24 +119,33 @@ import org.apache.commons.logging.LogFactory;
 		public KEYIN deserializedKey(DataInputBuffer key) throws IOException, InterruptedException {
 		    return null;
 		}
-
+		
 		public boolean nextKey() throws IOException, InterruptedException {
-		    // set hashmap_num
-		    i++;
-		    if (i == kA.size())
+
+		    if (partNum == hold.size())
 			return false;
 
-		    setHashMap(kA.get(i).part);
+		    i++;
+
+		    if (i == 0) 
+			setHashMap(partNum);
+		      
+		    if (hold.get(partNum).kA.size() == i) {
+			partNum++;
+			i = -1;
+			return nextKey();
+		    }
+		      
 		    return true;
 		}
-	     
+
 		public void setKey() {
 		}
-
-		public KEYIN getCurrentKey() {
-		    return (KEYIN)kA.get(i).key;
-		}
 		
+		public KEYIN getCurrentKey() {
+		    return (KEYIN)hold.get(partNum).kA.get(i);
+		}
+
 		public void newIterator() {
 		}
 
@@ -161,7 +166,7 @@ import org.apache.commons.logging.LogFactory;
 		    public boolean hasNext() {
 			j++;
 			
-			if (j == vA.get(i).size()) {
+			if (j == hold.get(partNum).vA.get(i).size()) {
 			    j = -1;
 			    return false;
 			}
@@ -170,7 +175,7 @@ import org.apache.commons.logging.LogFactory;
 		    }
 		 
 		    public VALUEIN next() {
-			return (VALUEIN)vA.get(i).get(j);
+			return (VALUEIN)hold.get(partNum).vA.get(i).get(j);
 		    }
 
 		    public void remove() {
@@ -209,6 +214,8 @@ import org.apache.commons.logging.LogFactory;
 		int check;
 		float avg_col;
 		JobConf job = (JobConf)conf;
+		kvHolder h;
+
 		this.keyClass = keyClass;
 		this.valueClass = valueClass;
 		SerializationFactory serializationFactory = new SerializationFactory(conf);
@@ -218,9 +225,16 @@ import org.apache.commons.logging.LogFactory;
 		kvbuf2 = new DataOutputBuffer();
 		kvbuf = new MappedDataOutputBuffer();
 		dib = new DataInputBuffer();
-		kA = new ArrayList<compKey>();
-		vA = new ArrayList<ArrayList<V>>();
-
+		
+		hold = new ArrayList<kvHolder>(partitions);
+		
+		for (int i = 0; i < partitions; i++) {
+		    h = new kvHolder();
+		    hold.add(i, h);
+		    h.kA = new ArrayList<K>();
+		    h.vA = new ArrayList<ArrayList<V>>();
+		}
+		
 		this.keySerializer.open(kvbuf);
 		this.keySerializer2.open(kvbuf2);
 		this.valueSerializer = serializationFactory.getSerializer(valueClass);
@@ -331,22 +345,21 @@ import org.apache.commons.logging.LogFactory;
 		dib.reset(kvbuf2.getData(), 0, kvbuf2.getLength());
 		
 		index = getIndex(shms.get(hashPart, dib));
-	     
+		
 		if (index == -1) {
-		    compKey c = new compKey(key, keyPart);
-		    kA.add(arrIndex, c);
+		    int arrIndex = hold.get(keyPart).arrIndex;
+		    hold.get(keyPart).kA.add(arrIndex, key);
 		    offset = shms.getOffset(hashPart);
-					
 		    valOff = writeShm(mbf, offset, arrIndex);
 		    keyOff = writeShm(mbf, offset + 9, dib);
 		    shms.put(hashPart, valOff, 4, keyOff, dib.getLength());
 		    index = arrIndex;
 		    ArrayList<V> v = new ArrayList();
-		    vA.add(index, v);
-		    arrIndex++;
+		    hold.get(keyPart).vA.add(index, v);
+		    hold.get(keyPart).arrIndex++;
 		}
-
-		vA.get(index).add(value);
+		
+		hold.get(keyPart).vA.get(index).add(value);
 		kvbuf2.reset();
 	    }
 
