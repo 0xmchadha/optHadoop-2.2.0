@@ -89,6 +89,14 @@ class ChainMapContextImpl<KEYIN, VALUEIN, KEYOUT, VALUEOUT> implements
     }
   }
 
+  public void setPriority(int priority) {
+      if (base instanceof MapContext) {
+	  MapContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT> mc = 
+	      (MapContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT>) base;
+	  mc.setPriority(priority);
+      }
+  }
+
   @Override
   public Counter getCounter(Enum<?> counterName) {
     return base.getCounter(counterName);

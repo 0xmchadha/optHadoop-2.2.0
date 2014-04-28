@@ -61,6 +61,7 @@ public class MapContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   /**
    * Get the input split for this map.
    */
+
   public InputSplit getInputSplit() {
     return split;
   }

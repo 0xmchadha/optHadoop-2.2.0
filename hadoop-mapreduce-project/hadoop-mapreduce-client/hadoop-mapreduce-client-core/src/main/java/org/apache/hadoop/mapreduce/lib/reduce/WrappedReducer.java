@@ -126,6 +126,10 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
     }
 
     @Override
+	public void setPriority(int priority) {
+    }
+
+    @Override
     public void write(KEYOUT key, VALUEOUT value) throws IOException,
         InterruptedException {
       reduceContext.write(key, value);
@@ -329,12 +333,12 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
     }
     
     @Override
-    public void newIterator(int hashnum) throws IOException {
-	reduceContext.newIterator(hashnum);
+	public void newIterator(int hashnum, int level) throws IOException {
+	reduceContext.newIterator(hashnum, level);
     }
     
     @Override 
-	public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist) {
+	public void setShl(SharedHashLookup shl, ArrayList<ArrayList<shmList>> shmlist) {
 	reduceContext.setShl(shl, shmlist);
     }
     /*    @Override

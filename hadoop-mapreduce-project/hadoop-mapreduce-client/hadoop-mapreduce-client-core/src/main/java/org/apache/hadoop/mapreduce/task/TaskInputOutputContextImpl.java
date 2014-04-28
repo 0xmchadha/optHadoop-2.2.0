@@ -93,6 +93,10 @@ public abstract class TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     output.write(key, value);
   }
 
+  public void setPriority(int priority) {
+      output.setPriority(priority);
+  }
+
   public OutputCommitter getOutputCommitter() {
     return committer;
   }

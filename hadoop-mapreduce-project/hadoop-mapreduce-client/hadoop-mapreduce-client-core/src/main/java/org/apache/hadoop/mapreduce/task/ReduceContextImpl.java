@@ -101,7 +101,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   private DataInputBuffer nextVal;
 
   private SharedHashLookup shl;
-  private ArrayList<shmList> shmlist;
+  private ArrayList<ArrayList<shmList>> shmlist;
 
   public ReduceContextImpl(Configuration conf, TaskAttemptID taskid,
                            ShmKVIterator input, 
@@ -132,7 +132,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     this.taskid = taskid;
   }
   
-  public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist) {
+  public void setShl(SharedHashLookup shl, ArrayList<ArrayList<shmList>> shmlist) {
       this.shl = shl;
       this.shmlist = shmlist;
       iterator = (ValueIterator)iterable.iterator();
@@ -148,9 +148,9 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       setParams();
   }
 
-  public void newIterator(int hashnum) throws IOException {
+  public void newIterator(int hashnum, int level) throws IOException {
       setParams();
-      iterator.setIterNum(hashnum);
+      iterator.setIterNum(hashnum, level);
   }
   
   public void setKey() {
@@ -271,6 +271,8 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     private boolean clearMarkFlag = false;
     private int hashmap_num;
     private int iterNum;
+    private int level_num;
+    private int iterLevel;
     private int state;
     private long hashVal;
     private iterateValues vIter;
@@ -281,10 +283,17 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
 	    vIter = shl.getVIter();
     }
 
-    public void setIterNum(int iterNum) {
-        iterNum++;
+    public void setIterNum(int iterNum, int level) {
+	iterNum++;
+
+	if (shmlist.get(level).size() == iterNum) {
+	    level++;
+	    iterNum = 0;
+	}
 
         this.iterNum = iterNum;
+	this.iterLevel = level;
+	this.level_num = level;
         this.hashmap_num = iterNum;
     }
         
@@ -295,6 +304,7 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     public void setKey(byte[] key, int length, long random) {
         state = 0;
         hashmap_num = iterNum;
+	level_num = iterLevel;
         vIter.setKey(key, length, random);
     }
 
@@ -314,10 +324,17 @@ public class ReduceContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
         
         while(true) {
             if (state == 1) {
-		if (hashmap_num == shmlist.size())
+		if (level_num == shmlist.size())
 		    return false;
 
-                shmList shlist = shmlist.get(hashmap_num++);
+                shmList shlist = shmlist.get(level_num).get(hashmap_num);
+		hashmap_num++;
+
+		if (shmlist.get(level_num).size() == hashmap_num) {
+		    level_num++;
+		    hashmap_num = 0;
+		}
+
 		vIter.setHashMap(shlist.shm);
 
 		if (vIter.getKey() == false)

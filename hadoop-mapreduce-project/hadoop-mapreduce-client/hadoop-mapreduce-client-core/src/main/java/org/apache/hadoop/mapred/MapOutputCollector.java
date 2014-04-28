@@ -36,7 +36,7 @@ public interface MapOutputCollector<K, V> {
     
   public void flush() throws IOException, InterruptedException, 
                              ClassNotFoundException;
-
+  public void setPriority(int priority);
   @InterfaceAudience.LimitedPrivate({"MapReduce"})
   @InterfaceStability.Unstable
   public static class Context {

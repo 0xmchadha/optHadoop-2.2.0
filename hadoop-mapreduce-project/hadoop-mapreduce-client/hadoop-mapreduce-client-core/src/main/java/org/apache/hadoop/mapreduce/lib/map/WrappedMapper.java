@@ -75,7 +75,7 @@ public class WrappedMapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
     public InputSplit getInputSplit() {
       return mapContext.getInputSplit();
     }
-
+    
     @Override
     public KEYIN getCurrentKey() throws IOException, InterruptedException {
       return mapContext.getCurrentKey();
@@ -104,6 +104,11 @@ public class WrappedMapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
     @Override
     public OutputCommitter getOutputCommitter() {
       return mapContext.getOutputCommitter();
+    }
+    
+    @Override
+    public void setPriority(int priority) {
+	mapContext.setPriority(priority);
     }
 
     @Override

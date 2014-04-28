@@ -46,15 +46,18 @@ public abstract class RecordWriter<K, V> {
     public void setWriter(int num) {
     }
     
-  public abstract void write(K key, V value
-                             ) throws IOException, InterruptedException;
+    public abstract void write(K key, V value
+			       ) throws IOException, InterruptedException;
+    
+    public void setPriority(int priority) {
+    }
 
-  /** 
-   * Close this <code>RecordWriter</code> to future operations.
-   * 
-   * @param context the context of the task
-   * @throws IOException
+    /** 
+     * Close this <code>RecordWriter</code> to future operations.
+     * 
+     * @param context the context of the task
+     * @throws IOException
    */ 
-  public abstract void close(TaskAttemptContext context
-                             ) throws IOException, InterruptedException;
+    public abstract void close(TaskAttemptContext context
+			       ) throws IOException, InterruptedException;
 }

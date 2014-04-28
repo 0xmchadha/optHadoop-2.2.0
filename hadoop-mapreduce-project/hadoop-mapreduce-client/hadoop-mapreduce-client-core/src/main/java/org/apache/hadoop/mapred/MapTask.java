@@ -412,7 +412,7 @@ public class MapTask extends Task {
 
 
     int numReduceTasks = conf.getNumReduceTasks();
-    LOG.info("numReduceTasks: " + numReduceTasks);
+    //    LOG.info("numReduceTasks: " + numReduceTasks);
     MapOutputCollector<OUTKEY, OUTVALUE> collector = null;
     if (numReduceTasks > 0) {
       collector = createSortingCollector(job, reporter);
@@ -667,7 +667,7 @@ public class MapTask extends Task {
     private final MapOutputCollector<K,V> collector;
     private final org.apache.hadoop.mapreduce.Partitioner<K,V> partitioner;
     private final int partitions;
-
+    
     @SuppressWarnings("unchecked")
     NewOutputCollector(org.apache.hadoop.mapreduce.JobContext jobContext,
                        JobConf job,
@@ -691,15 +691,19 @@ public class MapTask extends Task {
 
     @Override
     public void write(K key, V value) throws IOException, InterruptedException {
-      collector.collect(key, value,
-                        partitioner.getPartition(key, value, partitions));
+	collector.collect(key, value,
+			  partitioner.getPartition(key, value, partitions));
+    }
+
+    public void setPriority(int priority) {
+	collector.setPriority(priority);
     }
 
     @Override
     public void close(TaskAttemptContext context
                       ) throws IOException,InterruptedException {
       try {
-        collector.flush();
+	  collector.flush();
       } catch (ClassNotFoundException cnf) {
         throw new IOException("can't find class ", cnf);
       }
@@ -732,6 +736,7 @@ public class MapTask extends Task {
     org.apache.hadoop.mapreduce.InputSplit split = null;
     split = getSplitDetails(new Path(splitIndex.getSplitLocation()),
         splitIndex.getStartOffset());
+
     LOG.info("Processing split: " + split);
 
     org.apache.hadoop.mapreduce.RecordReader<INKEY,INVALUE> input =
@@ -815,6 +820,9 @@ public class MapTask extends Task {
       out = job.getOutputFormat().getRecordWriter(fs, job, finalName, reporter);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
+    }
+    
+    public void setPriority(int p) {
     }
 
     public void close() throws IOException {
@@ -918,7 +926,12 @@ public class MapTask extends Task {
         codec = null;
       }
       
-      globalWriter = new shmWriter(job, partitions, keyClass, valClass, codec, null);
+      String s = getTaskID().toString();
+      String[] strings = s.split("m_");
+      String[] string2 = strings[1].split("_");
+      int mapId = Integer.parseInt(string2[0]);
+      
+      globalWriter = new shmWriter(job, partitions, keyClass, valClass, codec, null, mapId);
       
       for (int i = 0; i < partitions; i++) {
 	  spillFile = mapOutputFile.getSpillFileForWrite(i);
@@ -978,6 +991,10 @@ public class MapTask extends Task {
 	return mapTask.getTaskID();
     }
     
+    public void setPriority(int priority) {
+	globalWriter.setPriority(priority);
+    }
+
     public void flush() throws IOException, ClassNotFoundException,
 	InterruptedException {
 	reporter.progress();

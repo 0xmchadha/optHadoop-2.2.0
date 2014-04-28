@@ -117,7 +117,7 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 
   private Task reduceTask;
   
-  private final ArrayList<shmList> shmlist = new ArrayList<shmList>();
+  private final ArrayList<ArrayList<shmList>> shmlist = new ArrayList<ArrayList<shmList>>();
 
   public MergeManagerImpl(TaskAttemptID reduceId, Task reduceTask,
 			  JobConf jobConf, 
@@ -190,22 +190,31 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
       RandomAccessFile shf;
       MappedByteBuffer shm = null;
       String fileName = file.toString();
-
+      int priority = 0;
+      
       //      shmrun.numPending.incrementAndGet();
       try {
 	  shf = new RandomAccessFile(fileName, "rw");
 	  shm = shf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, shf.length());
-	  shm.load(); 
+	  shm.load();
+	  priority = (int) (shm.getLong(0) >>> 62);
       } catch (IOException ie) {
 	  
       }
-
+      
       tmp = new shmList();
       tmp.file = fileName;
       tmp.shm = shm;
       
       synchronized(shmlist) {
-	  shmlist.add(tmp);
+	  if (!(shmlist.size() >= (priority + 1))) {
+	      for (int i = shmlist.size(); i < (priority + 1); i++) {
+		  ArrayList<shmList> shl = new ArrayList<shmList>();
+		  shmlist.add(shl);
+	      }
+	  }
+
+	  shmlist.get(priority).add(tmp);
 	  shmlist.notify();
       }
   }
@@ -240,7 +249,7 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
 	      try {
 		  // Wait for notification to start the merge...
 		  synchronized (shmlist) {
-		      while(shmlist.size() <= 0 && closed == false) {
+		      while(closed == false) {
 			  shmlist.wait();
 		      }
 		  }

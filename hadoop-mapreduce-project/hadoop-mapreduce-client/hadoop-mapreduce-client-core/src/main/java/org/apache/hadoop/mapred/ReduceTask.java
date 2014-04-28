@@ -346,7 +346,6 @@ public class ReduceTask extends Task {
             job.getClass(MRConfig.SHUFFLE_CONSUMER_PLUGIN, Shuffle.class, ShuffleConsumerPlugin.class);
 						
       shuffleConsumerPlugin = ReflectionUtils.newInstance(clazz, job);
-      LOG.info("Using ShuffleConsumerPlugin: " + shuffleConsumerPlugin);
 
       ShuffleConsumerPlugin.Context shuffleContext = 
         new ShuffleConsumerPlugin.Context(getTaskID(), job, FileSystem.getLocal(job), umbilical, 
@@ -446,7 +445,7 @@ public class ReduceTask extends Task {
 	private int arrListIndex = 0;
 	private boolean userWriteOutput = false;
 	private int count = 0;
-        private ArrayList<shmList> shmlist;
+        private ArrayList<ArrayList<shmList>> shmlist;
 
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
 	    iterativeComputing(JobConf job, 
@@ -501,7 +500,7 @@ public class ReduceTask extends Task {
 		new org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl(job, getTaskID(), reporter);
             reducer = (org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>) ReflectionUtils.newInstance(taskContext.getReducerClass(), job);
 	    trackedRW = new NewTrackingRecordWriter<OUTKEY, OUTVALUE>(ReduceTask.this, taskContext);
-	      
+	    
 	    job.setBoolean("mapred.skip.on", isSkipping());
 	    reducerContext = createReduceContext(null, job, getTaskID(),
 						 rIter, reduceInputKeyCounter, 
@@ -513,26 +512,34 @@ public class ReduceTask extends Task {
       
 	public <INKEY,INVALUE,OUTKEY,OUTVALUE>
 	    void runShm() throws IOException, InterruptedException, ClassNotFoundException {
-
 	    DataInputBuffer keyBuf;
             int hashnum = 0;
+	    int priority = 0;
+
             Iterable<INVALUE> iterable = reducerContext.getValues();
 
-            while(hashnum < shmlist.size()) {
-                shl.setNewLookup(shmlist.get(hashnum));
-                reducerContext.newIterator(hashnum);
+            while(priority < shmlist.size()) {
+		if (shmlist.get(priority).size() == hashnum) {
+		    return;
+		    //		    priority++;
+		    //		    hashnum = 0;
+		}
+
+                shl.setNewLookup(shmlist.get(priority).get(hashnum));
+                reducerContext.newIterator(hashnum, priority);
                 
                 while (reducerContext.nextKey()) {
 		    reducerContext.setKey();
                     reducer.reduce((INKEY)reducerContext.getCurrentKey(), iterable, reducerContext);
                 }
+
 		hashnum++;
             }
 
 	    trackedRW.close(reducerContext);
 	}
 
-	public void startProcessing(ArrayList<shmList> shmlist) {
+	public void startProcessing(ArrayList<ArrayList<shmList>> shmlist) {
             this.shmlist = shmlist;
 	    reducerContext.setShl(shl, shmlist);
    	}

@@ -43,9 +43,8 @@ public interface ReduceContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   /** Start processing next unique key. */
   public boolean nextKey() throws IOException,InterruptedException;
   
-  public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist);
-
-  public void newIterator(int hashnum) throws IOException; 
+  public void setShl(SharedHashLookup shl, ArrayList<ArrayList<shmList>> shmlist);
+  public void newIterator(int hashnum, int level) throws IOException; 
   public void newIterator() throws IOException;
   public void setKey();
   public void setCombiner();

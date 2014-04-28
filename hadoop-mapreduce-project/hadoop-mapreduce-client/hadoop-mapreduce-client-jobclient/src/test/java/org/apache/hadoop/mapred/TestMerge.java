@@ -312,6 +312,9 @@ public class TestMerge extends TestCase {
     public void flush() throws IOException, InterruptedException, 
                                ClassNotFoundException {
     }
+    
+    public void setPriority(int priority) {
+    }
 
     private void copyPartitions(Path mapOutputPath, Path indexPath)
       throws IOException {

@@ -47,9 +47,10 @@ public class SharedHashLookup {
     private static final int numSlots = 4;
     private static final int hashEntryLen = 5;
     private static final int slotSize = hashEntryLen * numSlots;
-    private static final int STARTING_ADDRESS = 8;
+    private static final int STARTING_ADDRESS = 128;
+    private static final int CACHELINE_SIZE = 128;
     private static final int MAX_LEN = 64;
-    
+    private static final int MAPID_LOC = 8;
     /* Total bytes for Progress */
     private static final Log LOG = LogFactory.getLog(SharedHashLookup.class.getName());
     
@@ -101,7 +102,7 @@ public class SharedHashLookup {
             int keyLen;
             
             hashLoc = STARTING_ADDRESS;
-            dataOffset = (int) shm.getLong(0);
+	    dataOffset = (int) (shm.getLong(0) & (((long)1 << 32) - 1));
 
             while(true) {
                 dataAdd = shm.getInt(hashLoc + 1);
@@ -254,16 +255,28 @@ public class SharedHashLookup {
         public void setHashMap(MappedByteBuffer shm) {
             this.shm = shm;
         }
+	
+	public int adjustSlot(int slot, long hashMask, int mapId) {
+	    int cacheLine = slot * (slotSize) / CACHELINE_SIZE;
+	    int pos = (slot * slotSize) - (cacheLine * CACHELINE_SIZE) / slotSize;
+	    cacheLine += mapId;
+	    
+	    return (int)((((cacheLine * CACHELINE_SIZE)/slotSize) + pos) & hashMask);
+	}
+
 
         public boolean getKey() {
             int tag, slot1, slot2, offset;
 	    long hashMask;
+	    int mapId;
 
-            dataOffset = shm.getLong(0);
-	    hashMask = (dataOffset/slotSize) - 1;
+            dataOffset = (shm.getLong(0) & (((long)1 << 32) - 1));
+	    mapId = shm.getInt(MAPID_LOC);
+	    hashMask = ((dataOffset - STARTING_ADDRESS)/slotSize) - 1;
 
             tag = (byte) (hash >>> 56);
             slot1 = (int) (hash & hashMask);
+	    slot1 = adjustSlot(slot1, hashMask, mapId);
             slot2 = (int) ((slot1 ^ (tag * 0x5bd1e995)) & hashMask);
 	    offset = slot1 * slotSize + STARTING_ADDRESS;
 	    

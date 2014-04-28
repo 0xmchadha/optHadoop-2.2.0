@@ -36,7 +36,6 @@ public interface MapContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   /**
    * Get the input split for this map.
    */
-  public InputSplit getInputSplit();
-  
+    public InputSplit getInputSplit();
 }
      

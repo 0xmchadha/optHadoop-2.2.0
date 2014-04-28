@@ -112,7 +112,7 @@
 		     return false;
 		 }
 
-		 public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist) {
+		 public void setShl(SharedHashLookup shl, ArrayList<ArrayList<shmList>> shmlist) {
 		 }
 
 		 public void setCombiner() {
@@ -155,7 +155,7 @@
 		public void newIterator() {
 		}
 
-		public void newIterator(int num) {
+		public void newIterator(int num, int level) {
 		}
 
 		public VALUEIN getCurrentValue() {
@@ -214,7 +214,8 @@
 			     Class<K> keyClass,
 			     Class<V> valueClass,
 			     CompressionCodec codec,
-			     Counters.Counter writesCounter) throws IOException {
+			     Counters.Counter writesCounter,
+			     int mapId) throws IOException {
 		int bs, rs, rts;
 		int check;
 		float avg_col;
@@ -235,7 +236,8 @@
 		hold = new ArrayList<kvHolder>(partitions);
 
 		for (int i = 0; i < partitions; i++) {
-		    h = hold.get(i);
+		    h = new kvHolder();
+		    hold.add(i, h);
 		    h.kA = new ArrayList<K>();
 		    h.vA = new ArrayList<ArrayList<V>>();
 		}
@@ -257,7 +259,7 @@
 		} else 
 		    pred_uniq_keys = 65536/4;
              
-		shms = new SharedHashCreate(partitions);
+		shms = new SharedHashCreate(partitions, mapId);
 	    }
 	    
 	    public void close_static() throws IOException {
@@ -270,7 +272,11 @@
 		    writtenRecordsCounter.increment(numRecordsWritten);
 		}
 	    }
-    
+	    
+	    public void setPriority(int priority) {
+		shms.setPriority(priority);
+	    }
+
 	    public int newReducer(int num_reducer, Path shmFile, 
 				  int hash_size, int keys) throws IOException {
 		if (num_reducer == -1) {

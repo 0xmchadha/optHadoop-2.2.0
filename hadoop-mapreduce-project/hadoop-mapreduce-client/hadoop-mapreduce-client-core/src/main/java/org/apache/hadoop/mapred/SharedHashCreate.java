@@ -39,6 +39,7 @@ public class SharedHashCreate {
     private ArrayList<Long> hashsizes;
     
     private int num_hashmaps;
+    private int mapId;
     private final slotInfo hashSlot1; // first slot for cuckoo hash
     private final slotInfo hashSlot2; // second slot for cuckoo hash
     private final keyInfo nKey; 
@@ -56,13 +57,16 @@ public class SharedHashCreate {
     private static final int numSlots = 4;
     private static final int hashEntryLen = 5;
     private static final int slotSize = hashEntryLen * numSlots;
-    private static final int STARTING_ADDRESS = 8;
+    private static final int STARTING_ADDRESS = 128; // optimized for cache line sizes
+    private static final int CACHELINE_SIZE = 128;
+    private static final int MAPID_LOC = 8;
     private static final int dataSize = STARTING_ADDRESS + 256*1024*1024;
     private static final int MAX_CUCKOO = 500;
     private static final int MAX_LEN = 64;
     private byte[] byteArr = new byte[MAX_LEN];
     private DataInputBuffer buf = new DataInputBuffer();
-    
+    private long l_priority;
+
     private static final Log LOG = LogFactory.getLog(SharedHashCreate.class.getName());
     
     private class ShmIterator implements ShmKVIterator {
@@ -204,7 +208,6 @@ public class SharedHashCreate {
 	}
     }
 
-
     private class repInfo {
         MappedByteBuffer dma;
         MappedByteBuffer hma;
@@ -244,6 +247,14 @@ public class SharedHashCreate {
 	    hashMask = (hashSize / slotSize) - 1;
 	}
 	
+	public int adjustSlot(int slot) {
+	    int cacheLine = slot * (slotSize) / CACHELINE_SIZE;
+	    int pos = (slot * slotSize) - (cacheLine * CACHELINE_SIZE) / slotSize;
+	    cacheLine += mapId;
+	    
+	    return (int)((((cacheLine * CACHELINE_SIZE)/slotSize) + pos) & hashMask);
+	}
+
 	public void newKey(MappedByteBuffer mbf, int keyOff, int keyLen) {
 	    //   this.key = key;
 	    len = keyLen;
@@ -252,9 +263,13 @@ public class SharedHashCreate {
 	    keyOffset = keyOff;
 	    long hash = CityHash.MappedcityHash64(mbf, keyOff, keyLen);
 	    slot1 = (int) (hash & hashMask);
+	    slot1 = adjustSlot(slot1);
 	    tag = (byte)(hash >>> 56);
 	    Tag[0] = tag;
 	    slot2 = (int)((slot1 ^ (tag * 0x5bd1e995)) & hashMask);
+
+	    // moving the slots to appropriate cache lines
+	    // to improve the cache performance.
 	}
 
 	public void newKey(byte[] dmba, int keyOff, int keyLen) {
@@ -265,6 +280,7 @@ public class SharedHashCreate {
 	    keyOffset = keyOff;
 	    long hash = CityHash.cityHash64(dmba, keyOff, keyLen);
 	    slot1 = (int) (hash & hashMask);
+	    slot1 = adjustSlot(slot1);
 	    tag = (byte)(hash >>> 56);
 	    Tag[0] = tag;
 	    slot2 = (int)((slot1 ^ (tag * 0x5bd1e995)) & hashMask);
@@ -281,6 +297,7 @@ public class SharedHashCreate {
 		int keyLen = (int)WritableUtils.readIntOpt(mbf.get(keyOff));
 		long hash = CityHash.MappedcityHash64(mbf, keyOff+1, keyLen);
 		slot1 = (int) (hash & hashMask);
+		slot1 = adjustSlot(slot1);
 		tag = (byte)(hash >>> 56);
 	    }
 	    
@@ -300,7 +317,7 @@ public class SharedHashCreate {
         return (((int)hashSize - STARTING_ADDRESS) * grow + STARTING_ADDRESS);
     }
     
-    private void setAvailableAddress(MappedByteBuffer mbf, int val) {
+    private void setAvailableAddress(MappedByteBuffer mbf, long val) {
         mbf.putLong(0, val);
     }
     
@@ -308,8 +325,9 @@ public class SharedHashCreate {
         return (int) mbf.getLong(0);
     }
 
-    public SharedHashCreate(int num_hashmaps) throws IOException {
-        
+    public SharedHashCreate(int num_hashmaps, int mapId) throws IOException {
+	
+	this.mapId = mapId;
         this.num_hashmaps = num_hashmaps;
 
         /* Initialize all the arraylist */
@@ -362,7 +380,7 @@ public class SharedHashCreate {
         setAvailableAddress(hma, STARTING_ADDRESS);
         setAvailableAddress(dma, STARTING_ADDRESS);
     }
-
+    
     public void rename(int hashmap_num) throws IOException {
         RandomAccessFile hmf = this.hmf.get(hashmap_num);
         RandomAccessFile dmf = this.dmf.get(hashmap_num);
@@ -429,7 +447,7 @@ public class SharedHashCreate {
         for (int i = 0; i < numSlots; i++) {
             int loc = offset + i * hashEntryLen;
             int dataAddress = hma.getInt(STARTING_ADDRESS + loc + 1);
-		
+
             if (dataAddress == 0) {
                 slot.found = false;
                 slot.replaced = false;
@@ -568,8 +586,8 @@ public class SharedHashCreate {
         hma = this.hma.get(hashmap_num);
         dma = this.dma.get(hashmap_num);
         hashsize = hashsizes.get(hashmap_num).intValue();
-        nKey.newHashSize(hashsize);
-        rKey.newHashSize(hashsize);
+        nKey.newHashSize(hashsize - STARTING_ADDRESS);
+        rKey.newHashSize(hashsize - STARTING_ADDRESS);
             
         nKey.newKey(dma, keyOff, keyLen);
         hashSlot1.slot = nKey.slot1;
@@ -671,7 +689,7 @@ public class SharedHashCreate {
 	hma = this.hma.get(hashmap_num);
 	dma = this.dma.get(hashmap_num);
 
-        nKey.newHashSize(this.hashsizes.get(hashmap_num).intValue());
+        nKey.newHashSize(this.hashsizes.get(hashmap_num).intValue() - STARTING_ADDRESS);
         nKey.newKey(keybuf, 0, keyLength);
         
         hashSlot1.slot = nKey.slot1;
@@ -722,9 +740,18 @@ public class SharedHashCreate {
         fileName.set(i, fileName.get(j));
         hashsizes.set(i, hashsizes.get(j));
     }
-        
+    
+    public void setPriority(int priority) {
+	long l_priority = priority;
+	this.l_priority = l_priority << 62;
+    }
+    
     public void close(int hashmap_num) {
-        hma.get(hashmap_num).putLong(0, hashsizes.get(hashmap_num));
+        hma.get(hashmap_num).putLong(0, hashsizes.get(hashmap_num) | l_priority);
+	hma.get(hashmap_num).putInt(MAPID_LOC, mapId);
     }
 }
+
+
+        
 

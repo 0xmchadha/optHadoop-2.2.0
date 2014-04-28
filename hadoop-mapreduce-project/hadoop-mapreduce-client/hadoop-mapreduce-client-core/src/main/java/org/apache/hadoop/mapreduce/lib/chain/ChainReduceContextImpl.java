@@ -78,12 +78,12 @@ class ChainReduceContextImpl<KEYIN, VALUEIN, KEYOUT, VALUEOUT> implements
   }
 
   @Override
-  public void newIterator(int hashnum) throws IOException {
-      base.newIterator(hashnum);
+      public void newIterator(int hashnum, int level) throws IOException {
+      base.newIterator(hashnum, level);
   }
 
   @Override
-  public void setShl(SharedHashLookup shl, ArrayList<shmList> shmlist) {
+  public void setShl(SharedHashLookup shl, ArrayList<ArrayList<shmList>> shmlist) {
       base.setShl(shl, shmlist);
   }
   
@@ -145,6 +145,10 @@ class ChainReduceContextImpl<KEYIN, VALUEIN, KEYOUT, VALUEOUT> implements
   @Override
   public boolean nextKeyValue() throws IOException, InterruptedException {
     return base.nextKeyValue();
+  }
+
+  @Override
+  public void setPriority(int priority) {
   }
 
   @Override
